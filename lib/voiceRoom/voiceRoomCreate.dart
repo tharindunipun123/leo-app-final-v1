@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'live_page.dart';
 
 class CreateVoiceRoomPage extends StatefulWidget {
@@ -29,6 +30,23 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
   void initState() {
     super.initState();
     _loadOwnerId();
+    _generateRoomId();
+  }
+
+  void _generateRoomId() {
+    final random = Random();
+    String roomId = '';
+    Set<String> existingIds = {}; // Store existing IDs to avoid duplicates
+
+    // Generate a 10-digit number
+    do {
+      roomId = '';
+      for (int i = 0; i < 10; i++) {
+        roomId += random.nextInt(10).toString();
+      }
+    } while (existingIds.contains(roomId));
+
+    _roomIdController.text = roomId;
   }
 
   @override
@@ -103,7 +121,6 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       final uri = Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records');
       final request = http.MultipartRequest('POST', uri);
 
-      // Add form fields
       request.fields.addAll({
         'voice_room_name': _roomNameController.text,
         'voiceRoom_id': _roomIdController.text,
@@ -113,7 +130,6 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         'ownerId': ownerId ?? '',
       });
 
-      // Add files
       if (groupPhoto != null) {
         request.files.add(await http.MultipartFile.fromPath(
           'group_photo',
@@ -135,12 +151,10 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         _showSuccessSnackBar('Voice room created successfully!');
 
-        // Get username for LivePage
         final prefs = await SharedPreferences.getInstance();
         final username = prefs.getString('firstName') ?? '';
         final userId = prefs.getString('userId') ?? '';
 
-        // Navigate to LivePage with the correct parameters
         if (!mounted) return;
 
         Navigator.pushReplacement(
@@ -151,7 +165,6 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
               isHost: true,
               username1: username,
               userId: userId,
-
             ),
           ),
         );
@@ -173,11 +186,13 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     TextInputType? keyboardType,
     int? maxLength,
     String? helperText,
+    bool? readOnly,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
         controller: controller,
+        readOnly: readOnly ?? false,
         decoration: InputDecoration(
           labelText: label,
           helperText: helperText,
@@ -255,7 +270,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       appBar: AppBar(
         title: const Text(
           'Create Voice Room',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold , color: Colors.white),
         ),
         centerTitle: true,
         backgroundColor: Colors.blue,
@@ -298,14 +313,8 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
                           icon: Icons.numbers,
                           keyboardType: TextInputType.number,
                           maxLength: 10,
-                          validator: (value) {
-                            if (value?.isEmpty ?? true) return 'This field is required';
-                            if (!RegExp(r'^\d{10}$').hasMatch(value!)) {
-                              return 'Please enter exactly 10 digits';
-                            }
-                            return null;
-                          },
-                          helperText: 'Enter a 10-digit number',
+                          readOnly: true,
+                          helperText: 'Auto-generated 10-digit number',
                         ),
                         _buildFormField(
                           controller: _countryController,

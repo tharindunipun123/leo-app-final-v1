@@ -36,6 +36,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   late Animation<double> _glowAnimation;
   String? _userAvatarUrl;
   String? _voiceRoomName;
+  String? _backgroundImageUrl;
   static const String POCKETBASE_URL = 'http://145.223.21.62:8090'; // Replace with your actual PocketBase URL
 
   @override
@@ -64,7 +65,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     )..repeat(reverse: true);
 
     _glowAnimation = Tween<double>(begin: 0.5, end: 1.2).animate(_controller);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Get crown gift data
+      final crownGift = giftItemList.firstWhere(
+              (gift) => gift.name == 'crown',  // Adjust name to match your gift
+          orElse: () => giftItemList.first
+      );
+
+      // Auto play the gift
+      ZegoGiftManager().playList.add(PlayData(
+          giftItem: crownGift,
+          count: 1
+      ));
+    });
   }
+
+
 
   Future<void> _fetchAndSetUserAvatar() async {
     try {
@@ -107,25 +124,22 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     try {
       final uri = Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}')
           .replace(queryParameters: {
-        'fields': 'voice_room_name',
+        'fields': 'voice_room_name,background_images',
       });
 
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['voice_room_name'] != null) {
-          setState(() {
-            _voiceRoomName = data['voice_room_name'];
-          });
-        }
-      } else {
-        print('Failed to fetch voice room details: ${response.statusCode}');
+        setState(() {
+          _voiceRoomName = data['voice_room_name'];
+          if (data['background_images'] != null) {
+            _backgroundImageUrl = '$POCKETBASE_URL/api/files/voiceRooms/${widget.roomID}/${data['background_images']}';
+          }
+        });
       }
     } catch (e) {
       print('Error fetching voice room details: $e');
@@ -335,7 +349,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           decoration: BoxDecoration(
             image: DecorationImage(
               fit: BoxFit.fill,
-              image: Image.asset('assets/images1/back.jpg').image,
+              image:_backgroundImageUrl != null
+                  ? NetworkImage(_backgroundImageUrl!)
+                  : AssetImage('assets/images1/back.jpg') as ImageProvider,
             ),
           ),
         ),

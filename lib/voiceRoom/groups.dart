@@ -6,7 +6,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 
-// Model class for Voice Room
 class VoiceRoom {
   final String id;
   final String voiceRoomName;
@@ -50,15 +49,15 @@ class GroupsScreen extends StatefulWidget {
   _GroupsScreenState createState() => _GroupsScreenState();
 }
 
-class _GroupsScreenState extends State<GroupsScreen>
-    with SingleTickerProviderStateMixin {
+class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<String> _tabs = ["Mine", "Hot"];
   List<VoiceRoom> _voiceRooms = [];
   String? _userId;
   String? _username;
   bool _isLoading = true;
-  final TextEditingController _searchController = TextEditingController();
+  TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -66,6 +65,19 @@ class _GroupsScreenState extends State<GroupsScreen>
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadUserData();
     _fetchVoiceRooms();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+    });
+  }
+
+  List<VoiceRoom> get filteredRooms {
+    return _voiceRooms.where((room) {
+      return room.voiceRoomName.toLowerCase().contains(_searchQuery);
+    }).toList();
   }
 
   Future<void> _loadUserData() async {
@@ -79,8 +91,7 @@ class _GroupsScreenState extends State<GroupsScreen>
   Future<void> _fetchVoiceRooms() async {
     try {
       final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/voiceRooms/records'),
+        Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records'),
       );
 
       if (response.statusCode == 200) {
@@ -183,14 +194,25 @@ class _GroupsScreenState extends State<GroupsScreen>
       return Center(child: CircularProgressIndicator(color: Colors.blue));
     }
 
-    final filteredRooms = isMineTab
-        ? _voiceRooms.where((room) => room.ownerId == _userId).toList()
-        : _voiceRooms;
+    final roomsToShow = isMineTab
+        ? filteredRooms.where((room) => room.ownerId == _userId).toList()
+        : filteredRooms;
+
+    if (roomsToShow.isEmpty) {
+      return Center(
+        child: Text(
+          _searchQuery.isEmpty
+              ? 'No voice rooms found'
+              : 'No matching voice rooms found',
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+        ),
+      );
+    }
 
     return ListView.builder(
       padding: EdgeInsets.all(16),
-      itemCount: filteredRooms.length,
-      itemBuilder: (context, index) => _buildRoomCard(filteredRooms[index]),
+      itemCount: roomsToShow.length,
+      itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
     );
   }
 
@@ -206,16 +228,20 @@ class _GroupsScreenState extends State<GroupsScreen>
             ClipRRect(
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
               child: CachedNetworkImage(
-                imageUrl:
-                'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
+                imageUrl: 'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
                 height: 150,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Center(
-                  child: CircularProgressIndicator(color: Colors.blue),
+                placeholder: (context, url) => Container(
+                  height: 150,
+                  color: Colors.grey[200],
+                  child: Center(child: CircularProgressIndicator(color: Colors.blue)),
                 ),
-                errorWidget: (context, url, error) =>
-                    Icon(Icons.error, color: Colors.blue),
+                errorWidget: (context, url, error) => Container(
+                  height: 150,
+                  color: Colors.grey[200],
+                  child: Icon(Icons.error, color: Colors.blue),
+                ),
               ),
             ),
             Padding(
@@ -226,10 +252,12 @@ class _GroupsScreenState extends State<GroupsScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        room.voiceRoomName,
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                      Expanded(
+                        child: Text(
+                          room.voiceRoomName,
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       Text('ID: ${room.voiceRoomId}'),
                     ],
@@ -261,22 +289,18 @@ class _GroupsScreenState extends State<GroupsScreen>
   Widget _buildTags(String tags) {
     final tagsList = tags.split(',');
     return Row(
-      children: tagsList
-          .map(
-            (tag) => Container(
-          margin: EdgeInsets.only(left: 4),
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.lightBlue[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            tag.trim(),
-            style: TextStyle(fontSize: 12, color: Colors.blue[700]),
-          ),
+      children: tagsList.map((tag) => Container(
+        margin: EdgeInsets.only(left: 4),
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.lightBlue[100],
+          borderRadius: BorderRadius.circular(12),
         ),
-      )
-          .toList(),
+        child: Text(
+          tag.trim(),
+          style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+        ),
+      )).toList(),
     );
   }
 

@@ -306,11 +306,11 @@ class _AccountScreenState extends State<AccountScreen> {
   void _navigateToViewProfile(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    // Navigate to Edit Profile screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ProfileApp()),
-    );
+    // // Navigate to Edit Profile screen
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(builder: (context) => ProfileApp()),
+    // );
   }
 
   void _navigateToWallet(BuildContext context) async{
