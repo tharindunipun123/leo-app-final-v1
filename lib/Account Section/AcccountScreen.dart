@@ -11,6 +11,7 @@ import 'Myitems.dart';
 import 'package:leo_app_01/Account%20Section/nobel/profilepage.dart';
 import 'invite friends/invite_screen.dart';
 import 'achievement/achievement_screen.dart';
+import 'edit profile/main_profile.dart';
 
 
 class AccountScreen extends StatefulWidget {
@@ -311,6 +312,16 @@ class _AccountScreenState extends State<AccountScreen> {
     //   context,
     //   MaterialPageRoute(builder: (context) => ProfileApp()),
     // );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MainProfile(
+          name: "tharindu",
+          userId: userId,
+          profileImgUrl:"#",
+        ),
+      ),
+    );
   }
 
   void _navigateToWallet(BuildContext context) async{
