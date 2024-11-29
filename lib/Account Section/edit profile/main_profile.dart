@@ -34,19 +34,14 @@ class MainProfile extends StatelessWidget {
         darkTheme: darkTheme,
         routes: {
           'profile': (context) => ProfileScreen(
-                name: name,
-                userId: userId,
-                profileImgUrl: profileImgUrl,
               ),
           'gifts': (context) => const GiftsScreen(),
           'badges': (context) => BadgesScreen(
-                name: name,
-                userId: userId,
-                profileImgUrl: profileImgUrl,
+
               ),
           'rooms': (context) => const VoiceRoomsScreen(),
           'edit-profile': (context) =>
-              EditProfileScreen(name: name, userId: userId),
+              EditProfileScreen(firstname: name, userId: userId),
           'edit-name': (context) => EditNameScreen(userId: userId),
           'edit-bio': (context) => EditBio(
                 userId: userId,

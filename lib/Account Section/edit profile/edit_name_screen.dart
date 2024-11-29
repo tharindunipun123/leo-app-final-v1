@@ -2,22 +2,115 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/body_container.dart';
 import 'widgets/primary_button.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
-
-import '../constants.dart';
 import 'widgets/back_button.dart';
+import '../constants.dart';
 
-class EditNameScreen extends StatelessWidget {
+class EditNameScreen extends StatefulWidget {
   final String userId;
-
   const EditNameScreen({Key? key, required this.userId}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final TextEditingController _nameController = TextEditingController();
+  State<EditNameScreen> createState() => _EditNameScreenState();
+}
 
+class _EditNameScreenState extends State<EditNameScreen> {
+  final TextEditingController _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentName();
+  }
+
+  Future<void> _loadCurrentName() async {
+    try {
+      final response = await http.get(
+          Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}')
+      );
+
+      if (response.statusCode == 200) {
+        final userData = json.decode(response.body);
+        setState(() {
+          _nameController.text = userData['firstname'] ?? '';
+        });
+      }
+    } catch (e) {
+      print('Error loading name: $e');
+    }
+  }
+
+  Future<void> _updateName(BuildContext context) async {
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty) return;
+
+    try {
+      final response = await http.patch(
+        Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'firstname': newName}),
+      );
+
+      if (response.statusCode == 200) {
+        await _updateLocalStorage(newName);
+        _showSuccessDialog(context);
+      } else {
+        _showErrorDialog(context);
+      }
+    } catch (e) {
+      print('Error updating name: $e');
+      _showErrorDialog(context);
+    }
+  }
+
+  Future<void> _updateLocalStorage(String newName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('firstName', newName);
+    } catch (e) {
+      print('Error updating local storage: $e');
+    }
+  }
+
+  void _showSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: const Text('Name updated successfully!'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();  // Close dialog
+              Navigator.of(context).pop();  // Return to previous screen
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: const Text('Failed to update name. Please try again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: const AppBarBackButton(),
@@ -42,89 +135,19 @@ class EditNameScreen extends StatelessWidget {
                 color: darkModeEnabled ? kDarkTextColor : kTextColor,
               ),
             ),
-            SizedBox(
-              height: 8.h,
-            ),
+            SizedBox(height: 8.h),
             TextFormField(
               controller: _nameController,
-              style: TextStyle(
-                fontSize: 16.sp,
-              ),
+              style: TextStyle(fontSize: 16.sp),
               decoration: InputDecoration(
                 border: kInputBorder,
                 enabledBorder: kInputEnabledBorder,
                 focusedBorder: kInputFocusedBorder,
               ),
             ),
-            SizedBox(
-              height: 20.h,
-            ),
+            SizedBox(height: 20.h),
             PrimaryButton(
-              onTap: () async {
-                String newName = _nameController.text.trim();
-                var url =
-                    'http://45.126.125.172:8080/api/v1/partialUpdateProfile';
-
-                var headers = {
-                  'Content-Type': 'application/json',
-                };
-
-                var body = {
-                  'userId': userId,
-                  'name': newName,
-                };
-
-                var response = await http.post(
-                  Uri.parse(url),
-                  headers: headers,
-                  body: jsonEncode(body),
-                );
-
-                if (response.statusCode == 200) {
-                  // Update local storage (user.json) with new name
-                  updateLocalStorage(newName);
-
-                  // Show success dialog
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: Text('Success'),
-                        content: Text('Name updated successfully!'),
-                        actions: <Widget>[
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop(); // Close the dialog
-                              Navigator.of(context)
-                                  .pop(); // Navigate back to previous page// Navigate to edit-profile route
-                            },
-                            child: Text('OK'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                } else {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        title: Text('Error'),
-                        content: Text(
-                            'Failed to update name. Please try again later.'),
-                        actions: <Widget>[
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                            child: Text('OK'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }
-              },
+              onTap: () => _updateName(context),
               text: 'Save',
             ),
           ],
@@ -133,29 +156,9 @@ class EditNameScreen extends StatelessWidget {
     );
   }
 
-  Future<void> updateLocalStorage(String newName) async {
-    try {
-      // Get instance of SharedPreferences
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-
-      // Get current user data from SharedPreferences
-      String userDataString = prefs.getString('user') ?? '{}';
-      Map<String, dynamic> userData = jsonDecode(userDataString);
-
-      // Update name in user data if newName is not null or empty
-      if (newName != null && newName.isNotEmpty) {
-        userData['name'] = newName;
-
-        // Save updated user data back to SharedPreferences
-        await prefs.setString('user', jsonEncode(userData));
-
-        print('User name updated: $newName');
-      } else {
-        print('New name is invalid or empty.');
-      }
-    } catch (e) {
-      print('Error updating user data: $e');
-      // Handle any specific error cases here
-    }
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 }

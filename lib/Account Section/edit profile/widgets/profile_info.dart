@@ -59,25 +59,25 @@ class ProfileInfo extends StatelessWidget {
             SizedBox(
               height: 5.w,
             ),
-            Row(
-              children: [
-                const LevelTag(
-                  text: 'Noble',
-                ),
-                SizedBox(
-                  width: 5.w,
-                ),
-                const LevelTag(
-                  text: 'Noble',
-                ),
-                SizedBox(
-                  width: 5.w,
-                ),
-                const LevelTag(
-                  text: 'Noble',
-                ),
-              ],
-            )
+            // Row(
+            //   children: [
+            //     const LevelTag(
+            //       text: 'Noble',
+            //     ),
+            //     SizedBox(
+            //       width: 5.w,
+            //     ),
+            //     const LevelTag(
+            //       text: 'Noble',
+            //     ),
+            //     SizedBox(
+            //       width: 5.w,
+            //     ),
+            //     const LevelTag(
+            //       text: 'Noble',
+            //     ),
+            //   ],
+            // )
           ],
         )
       ],

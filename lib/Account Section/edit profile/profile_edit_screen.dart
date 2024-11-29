@@ -1,27 +1,28 @@
 import 'dart:convert';
-
+import 'dart:io';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
-import 'theme.dart';
-import 'widgets/body_container.dart';
-import 'widgets/gender_selector_dialog.dart';
 import 'package:path/path.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
+import 'theme.dart';
 import '../constants.dart';
+import 'widgets/body_container.dart';
+import 'widgets/gender_selector_dialog.dart';
 import 'widgets/back_button.dart';
 import 'widgets/profile_edit_tile.dart';
 import 'widgets/text_with_arrow.dart';
-import 'dart:io';
 
 class EditProfileScreen extends StatefulWidget {
   final String userId;
-  final String name;
-  const EditProfileScreen(
-      {super.key, required this.name, required this.userId});
+  final String firstname;
+  const EditProfileScreen({
+    super.key,
+    required this.firstname,
+    required this.userId
+  });
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -32,87 +33,127 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final picker = ImagePicker();
   XFile? file;
   Country? selectedCountry;
+  Map<String, dynamic>? userData;
 
-  Future<void> selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-        context: context,
-        initialDate: selectedDate,
-        firstDate: DateTime(1900, 1),
-        lastDate: DateTime(2101));
-    if (picked != null && picked != selectedDate) {
-      setState(() {
-        selectedDate = picked;
-      });
-      updateBirthday(selectedDate);
-    }
+  @override
+  void initState() {
+    super.initState();
+    fetchUserData();
   }
 
-  Future<void> updateBirthday(DateTime birthday) async {
+  Future<void> fetchUserData() async {
     try {
-      var url = 'http://45.126.125.172:8080/api/v1/partialUpdateProfile';
-      var headers = {'Content-Type': 'application/json'};
-
-      // Format birthday to 'YYYY-MM-DD' string
-      var formattedBirthday =
-          '${birthday.year}-${birthday.month.toString().padLeft(2, '0')}-${birthday.day.toString().padLeft(2, '0')}';
-
-      var body = {
-        'userId': widget.userId, // Replace with your user ID
-        'birthday': formattedBirthday,
-      };
-
-      var response = await http.post(
-        Uri.parse(url),
-        headers: headers,
-        body: jsonEncode(body),
+      final response = await http.get(
+          Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}')
       );
 
       if (response.statusCode == 200) {
-        print('Birthday updated successfully: $formattedBirthday');
-        // Handle success, e.g., show a dialog or update local state
-      } else {
-        print('Failed to update birthday: ${response.statusCode}');
-        // Handle failure, e.g., show an error message
+        setState(() {
+          userData = json.decode(response.body);
+        });
       }
     } catch (e) {
-      print('Error updating birthday: $e');
-      // Handle any exceptions thrown during the HTTP request
+      print('Error fetching user data: $e');
     }
   }
+
+
+  // Future<void> selectDate(BuildContext context) async {
+  //   DateTime initialDate;
+  //   if (userData?['birthday'] != null) {
+  //     try {
+  //       // Handle Pocketbase's datetime format
+  //       initialDate = DateTime.parse(userData!['birthday']);
+  //     } catch (e) {
+  //       initialDate = DateTime.now();
+  //       print('Date parse error: $e');
+  //     }
+  //   } else {
+  //     initialDate = DateTime.now();
+  //   }
+  //
+  //   final DateTime? picked = await showDatePicker(
+  //     context: context,
+  //     initialDate: initialDate,
+  //     firstDate: DateTime(1900),
+  //     lastDate: DateTime.now(),
+  //   );
+  //
+  //   if (picked != null) {
+  //     updateBirthday(picked);
+  //   }
+  // }
+
+  // Future<void> updateBirthday(DateTime birthday) async {
+  //   try {
+  //     final response = await http.patch(
+  //       Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}'),
+  //       headers: {'Content-Type': 'application/json'},
+  //       body: jsonEncode({
+  //         'birthday': birthday.toUtc().toIso8601String(),
+  //       }),
+  //     );
+  //
+  //     if (response.statusCode == 200) {
+  //       fetchUserData();
+  //     }
+  //   } catch (e) {
+  //     print('Error updating birthday: $e');
+  //   }
+  // }
 
   Future<void> pickAndUploadImage() async {
-    final picker = ImagePicker();
-    XFile? pickedFile;
-
     try {
-      pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        // Rename the image file
-        String newFileName = 'new_image_name.jpg';
-        final directory = await getApplicationDocumentsDirectory();
-        String newFilePath = join(directory.path, newFileName);
-        File newImageFile = await File(pickedFile.path).copy(newFilePath);
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-        // Upload the renamed image file
-        await uploadImage(newImageFile);
+      if (pickedFile != null) {
+        final bytes = await File(pickedFile.path).readAsBytes();
+        final ext = extension(pickedFile.path);
+
+        var request = http.MultipartRequest(
+            'PATCH',
+            Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}')
+        );
+
+        request.files.add(
+            http.MultipartFile.fromBytes(
+                'avatar',
+                bytes,
+                filename: 'avatar$ext'
+            )
+        );
+
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          fetchUserData(); // Refresh UI
+        }
       }
     } catch (e) {
-      print('Error picking image: $e');
+      print('Error uploading image: $e');
     }
   }
 
-  Future<void> uploadImage(File imageFile) async {
-    var uri = Uri.parse('http://45.126.125.172:8080/api/v1/updateProfile');
-    var request = http.MultipartRequest('POST', uri);
-    request.files
-        .add(await http.MultipartFile.fromPath('file', imageFile.path));
-    var response = await request.send();
+  Future<void> _saveCountryToDatabase(Country country) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'country': country.name,
+        }),
+      );
 
-    if (response.statusCode == 200) {
-      print('Image uploaded successfully');
-    } else {
-      print('Image upload failed with status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        setState(() {
+          selectedCountry = country;
+        });
+      }
+    } catch (e) {
+      print('Error updating country: $e');
     }
+  }
+  Future<String> getuserId() async {
+   return "";
   }
 
   @override
@@ -137,19 +178,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
               borderRadius: BorderRadius.circular(10.w),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 20.0, horizontal: 10.0),
+                padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
                 child: Column(
                   children: [
                     ProfileEditTile(
                       icon: 'assets/icons/ic-user.svg',
                       text: 'Avatar',
-                      onTap: () async {
-                        pickAndUploadImage();
-                      },
+                      onTap: pickAndUploadImage,
                       endWidget: ClipRRect(
                         borderRadius: BorderRadius.circular(10.w),
-                        child: Image.asset(
+                        child: userData?.containsKey('avatar') ?? false
+                            ? Image.network(
+                          'http://145.223.21.62:8090/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}',
+                          width: 20.w,
+                          height: 20.w,
+                          fit: BoxFit.cover,
+                        )
+                            : Image.asset(
                           'assets/images/avatar.png',
                           width: 20.w,
                           height: 20.w,
@@ -162,49 +207,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       indent: 20.0,
                       endIndent: 20.0,
                     ),
-                    ProfileEditTile(
-                      icon: 'assets/icons/ic-image.svg',
-                      text: 'Cover',
-                      onTap: () async {
-                        //await getImageFromCamera();
-                      },
-                      endWidget: Image.asset(
-                        'assets/images/room.png',
-                        width: 40.w,
-                        height: 20.w,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
                   ],
                 ),
               ),
             ),
-            SizedBox(
-              height: 20.w,
-            ),
+            SizedBox(height: 20.w),
             Material(
               color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
               borderRadius: BorderRadius.circular(10.w),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 20.0, horizontal: 10.0),
+                padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
                 child: Column(
                   children: [
                     ProfileEditTile(
                       icon: 'assets/icons/ic-user.svg',
                       text: 'Name',
-                      onTap: () {
-                        Navigator.pushNamed(context, 'edit-name');
-                      },
+                      onTap: () => Navigator.pushNamed(context, 'edit-name'),
                       endWidget: TextWithArrow(
-                        text: widget.name,
+                        text: userData?['firstname'] ?? '',
                       ),
                     ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
+                    _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-info.svg',
                       text: 'ID',
@@ -214,15 +237,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         showArrow: false,
                       ),
                     ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
+                    _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-users.svg',
                       text: 'Gender',
                       onTap: () {
+
                         showDialog(
                           context: context,
                           useSafeArea: true,
@@ -234,15 +254,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           },
                         );
                       },
-                      endWidget: const TextWithArrow(
-                        text: 'Male',
+                      endWidget: TextWithArrow(
+                        text: userData?['gender'] ?? 'Not set',
                       ),
                     ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
+                    _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-flag.svg',
                       text: 'Country',
@@ -250,58 +266,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         showCountryPicker(
                           context: context,
                           showPhoneCode: false,
-                          onSelect: (Country country) {
-                            _saveCountryToDatabase(country);
-                          },
+                          onSelect: _saveCountryToDatabase,
                         );
                       },
-                      endWidget: const TextWithArrow(
-                        text: 'Sri Lanka',
+                      endWidget: TextWithArrow(
+                        text: userData?['country'] ?? 'Not set',
                       ),
                     ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
-                    ProfileEditTile(
-                      icon: 'assets/icons/ic_calendar.svg',
-                      text: 'Birthday',
-                      onTap: () {
-                        selectDate(context);
-                      },
-                      endWidget: const TextWithArrow(
-                        text: '1997-05-28',
-                      ),
-                    ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
+                    _buildDivider(),
+                    // ProfileEditTile(
+                    //   icon: 'assets/icons/ic_calendar.svg',
+                    //   text: 'Birthday',
+                    //   onTap: () => selectDate(context),
+                    //   endWidget: TextWithArrow(
+                    //     text: userData?['birthday'] != null
+                    //         ? DateTime.parse(userData!['birthday'])
+                    //         .toLocal()
+                    //         .toString()
+                    //         .split(' ')[0]
+                    //         : 'Not set',
+                    //   ),
+                    // ),
+                    _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-list.svg',
                       text: 'Bio',
-                      onTap: () {
-                        Navigator.pushNamed(context, 'edit-bio');
-                      },
-                      endWidget: const TextWithArrow(
-                        text: '',
+                      onTap: () => Navigator.pushNamed(context, 'edit-bio'),
+                      endWidget: TextWithArrow(
+                        text: userData?['bio'] ?? '',
                       ),
                     ),
-                    const Divider(
-                      color: kSeperatorColor,
-                      indent: 20.0,
-                      endIndent: 20.0,
-                    ),
+                    _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-motto.svg',
                       text: 'Motto',
-                      onTap: () {
-                        Navigator.pushNamed(context, 'edit-motto');
-                      },
-                      endWidget: const TextWithArrow(
-                        text: '',
+                      onTap: () => Navigator.pushNamed(context, 'edit-motto'),
+                      endWidget: TextWithArrow(
+                        text: userData?['moto'] ?? '',
                       ),
                     ),
                   ],
@@ -314,33 +315,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Future<void> _saveCountryToDatabase(Country country) async {
-    try {
-      var url = 'http://45.126.125.172:8080/api/v1/partialUpdateProfile';
-      var headers = {
-        'Content-Type': 'application/json',
-      };
-      var body = {
-        'userId': widget.userId, // Replace with actual user ID
-        'country': country.name, // or any field according to your API
-      };
-
-      var response = await http.post(
-        Uri.parse(url),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-
-      if (response.statusCode == 200) {
-        print('Country updated successfully: ${country.displayName}');
-        // Handle success scenario (e.g., show confirmation to user)
-      } else {
-        print('Failed to update country: ${response.statusCode}');
-        // Handle error scenario
-      }
-    } catch (e) {
-      print('Error updating country: $e');
-      // Handle network or other errors
-    }
+  Widget _buildDivider() {
+    return const Divider(
+      color: kSeperatorColor,
+      indent: 20.0,
+      endIndent: 20.0,
+    );
   }
 }
