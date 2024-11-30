@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import './gift/gift.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import 'package:flutter_image_carousel_slider/image_carousel_slider.dart';
+import 'package:flutter_image_carousel_slider/image_carousel_slider_left_right_show.dart';
 // Package imports:
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
@@ -225,23 +226,277 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
 
-
   @override
   Widget build(BuildContext context) {
-    final hostConfig = ZegoUIKitPrebuiltLiveAudioRoomConfig.host();
-
-
     return SafeArea(
-      child: ZegoUIKitPrebuiltLiveAudioRoom(
-        appID: 2069292420,
-        appSign: '3b8893143a13c24f6d82dd7260b70a9d29814b99130e7bcebfe3e09dac8c0731',
-        userID: localUserID,
-        userName: widget.username1,
-        roomID: widget.roomID,
-        events: events,
-        config: config,
+      child: Stack(
+        children: [
+          // Main Zego UIKit widget
+          ZegoUIKitPrebuiltLiveAudioRoom(
+            appID: 2069292420,
+            appSign: '3b8893143a13c24f6d82dd7260b70a9d29814b99130e7bcebfe3e09dac8c0731',
+            userID: localUserID,
+            userName: widget.username1,
+            roomID: widget.roomID,
+            events: events,
+            config: config,
+          ),
+
+          // Responsive Room Info Overlay
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 55, // Lowered position
+            left: 10, // Adjusted for left corner
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.3, // 50% of screen width
+                    minHeight: 40, // Minimum height
+                    maxHeight: 50, // Maximum height
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.blueAccent.withOpacity(0.7),
+                        Colors.lightBlueAccent.withOpacity(0.7)
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(25), // More rounded
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Room Image
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white30, width: 1),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: _backgroundImageUrl != null
+                              ? Image.network(
+                            _backgroundImageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Icon(Icons.image, size: 20, color: Colors.white54),
+                          )
+                              : Icon(Icons.image, size: 20, color: Colors.white54),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Room Name
+                      Flexible(
+                        child: Text(
+                          _voiceRoomName ?? "Voice Room",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Plus Icon
+                      GestureDetector(
+                        onTap: () => _showBottomSheet(context,widget.roomID),
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _showBottomSheet(BuildContext context, String roomId) async {
+    // Fetch user data from the PocketBase API
+    List<Map<String, dynamic>> userData = await _fetchRoomUserDetails(roomId);
+
+    // Example network images for the carousel
+    List<String> imageList = [
+      "https://th.bing.com/th/id/OIP.XBvFTQ9AFT56EbqP60aKVwHaFj?rs=1&pid=ImgDetMain",
+      "https://ids13.com/wp-content/uploads/2021/04/gem-saviour-conquest.jpg",
+      "https://play-lh.googleusercontent.com/uMCSwJnIKCemiAIc7xNTGBkOxlSu_e6xzZb29cqqV6bKU8Qz0m4ZQ5pmGhBNxE-vBrA",
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      backgroundColor: Colors.white,
+      isScrollControlled: true, // Allows for resizing
+      builder: (context) {
+        return FractionallySizedBox(
+          heightFactor: 0.75, // 75% of screen height
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Spacing and Title
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                child: Center(
+                  child: Text(
+                    "Room Joined Participants",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              // const Divider(height: 0, thickness: 1), // No space between divider and carousel
+
+// Vertical Image Carousel with Green Gradient Background
+              Container(
+                height: 120, // Smaller height for the carousel
+                decoration: BoxDecoration(
+                  // gradient: const LinearGradient(
+                  //   colors: [Colors.greenAccent, Colors.lightGreen],
+                  //   begin: Alignment.topLeft,
+                  //   end: Alignment.bottomRight,
+                  // ),
+                  borderRadius: BorderRadius.circular(0), // Optional rounded corners
+                ),
+                child: Center(
+                  child: ImageCarouselSliderLeftRightShow(
+                    items: imageList,
+                    imageHeight: 100, // Adjust to fit smaller height
+                    dotColor: Colors.white, // Dots for navigation
+                  ),
+                ),
+              ),
+
+              // const Divider(height: 0, thickness: 1), // No space between carousel and next section
+
+              // User List
+              Expanded(
+                child: ListView.builder(
+                  itemCount: userData.length,
+                  padding: const EdgeInsets.all(16),
+                  itemBuilder: (context, index) {
+                    final user = userData[index];
+                    return ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          "http://145.223.21.62:8090/api/files/${user['collectionId']}/${user['id']}/${user['avatar']}",
+                          width: 40, // Smaller profile picture
+                          height: 40,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      title: Text(
+                        user['firstname'] ?? "Unknown",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        user['bio'] ?? "No bio available",
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    );
+                  },
+                ),
+              ),
+              // Gradient "Join" Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: GestureDetector(
+                  onTap: () {
+                    // Handle Join Button Click
+                    Navigator.of(context).pop();
+                  },
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.blue, Colors.lightBlueAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        "Join",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRoomUserDetails(String roomId) async {
+    final String url =
+        "http://145.223.21.62:8090/api/collections/users/records"; // Replace with the actual API endpoint
+    try {
+      final response = await http.get(Uri.parse(url), headers: {
+        'Content-Type': 'application/json',
+      });
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['items']);
+      } else {
+        print("Failed to fetch data: ${response.statusCode}");
+        return [];
+      }
+    } catch (e) {
+      print("Error fetching user details: $e");
+      return [];
+    }
   }
 
   ZegoUIKitPrebuiltLiveAudioRoomConfig get config {
@@ -342,6 +597,11 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   Widget background() {
+    List<String> imageList = [
+      "https://th.bing.com/th/id/OIP.XBvFTQ9AFT56EbqP60aKVwHaFj?rs=1&pid=ImgDetMain",
+      "https://ids13.com/wp-content/uploads/2021/04/gem-saviour-conquest.jpg",
+      "https://play-lh.googleusercontent.com/uMCSwJnIKCemiAIc7xNTGBkOxlSu_e6xzZb29cqqV6bKU8Qz0m4ZQ5pmGhBNxE-vBrA",
+    ];
     /// how to replace background view
     return Stack(
       children: [
@@ -372,6 +632,19 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 165, // Adjusted position
+          right: 16, // Adjusted position
+          child: Container(
+            width: 70, // Vertical rectangle width
+            height: 190, // Vertical rectangle height
+            child: ImageCarouselSlider(
+              items: imageList,
+              imageHeight: 180, // Matches the container height
+              dotColor: Colors.black, // Dot color for indicators
             ),
           ),
         ),
@@ -773,3 +1046,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     ));
   }
 }
+
+
+

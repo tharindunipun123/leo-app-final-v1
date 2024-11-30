@@ -129,7 +129,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 FontAwesomeIcons.userPlus,
                     () => _navigateToInviteFriends(context),
               ),
-              _buildLogoutButton(context),
+              //_buildLogoutButton(context),
               const SizedBox(height: 20),
             ]),
           ),
@@ -276,23 +276,23 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _buildLogoutButton(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.all(8.0),
-      child: ElevatedButton(
-        onPressed: () => _handleLogout(context),
-        child: Text('Logout'),
-        style: ElevatedButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: Colors.red,
-          padding: EdgeInsets.symmetric(vertical: 16.0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0),
-          ),
-        ),
-      ),
-    );
-  }
+  // Widget _buildLogoutButton(BuildContext context) {
+  //   return Padding(
+  //     padding: EdgeInsets.all(8.0),
+  //     child: ElevatedButton(
+  //       onPressed: () => _handleLogout(context),
+  //       child: Text('Logout'),
+  //       style: ElevatedButton.styleFrom(
+  //         foregroundColor: Colors.white,
+  //         backgroundColor: Colors.red,
+  //         padding: EdgeInsets.symmetric(vertical: 16.0),
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(12.0),
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   void _navigateToEditProfile(BuildContext context) async{
     final prefs = await SharedPreferences.getInstance();
@@ -335,7 +335,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   void _navigateToItems(BuildContext context) {
     // Navigate to Nobel screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyItemsPage()));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreScreen()));
   }
 
   void _navigateToLevel(BuildContext context) {
@@ -365,34 +365,34 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  void _handleLogout(BuildContext context) {
-    // Handle logout logic here
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Logout'),
-          content: Text('Are you sure you want to logout?'),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: Text('Logout'),
-              onPressed: () {
-                // Perform logout action
-                Navigator.of(context).pop();
-                // Navigate to login screen or clear user session
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
+  // void _handleLogout(BuildContext context) {
+  //   // Handle logout logic here
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: Text('Logout'),
+  //         content: Text('Are you sure you want to logout?'),
+  //         actions: <Widget>[
+  //           TextButton(
+  //             child: Text('Cancel'),
+  //             onPressed: () {
+  //               Navigator.of(context).pop();
+  //             },
+  //           ),
+  //           TextButton(
+  //             child: Text('Logout'),
+  //             onPressed: () {
+  //               // Perform logout action
+  //               Navigator.of(context).pop();
+  //               // Navigate to login screen or clear user session
+  //             },
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
 }
 
 // Placeholder screen for navigation

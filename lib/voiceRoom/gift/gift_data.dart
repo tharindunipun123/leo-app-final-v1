@@ -5,7 +5,7 @@ final List<ZegoGiftItem> giftItemList = [
     name: 'Music Box1',
     icon: 'assets/gift1/musicBox.png',
     sourceURL:
-        'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
+    'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
     source: ZegoGiftSource.url,
     type: ZegoGiftType.mp4,
     weight: 1,
@@ -14,7 +14,7 @@ final List<ZegoGiftItem> giftItemList = [
     name: 'Music Box2',
     icon: 'assets/gift1/musicBox.png',
     sourceURL:
-        'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
+    'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
     source: ZegoGiftSource.url,
     type: ZegoGiftType.mp4,
     weight: 10,
@@ -23,7 +23,7 @@ final List<ZegoGiftItem> giftItemList = [
     name: 'Music Box3',
     icon: 'assets/gift1/musicBox.png',
     sourceURL:
-        'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
+    'https://storage.zego.im/sdk-doc/Pics/zegocloud/gift/music_box.mp4',
     source: ZegoGiftSource.url,
     type: ZegoGiftType.mp4,
     weight: 100,

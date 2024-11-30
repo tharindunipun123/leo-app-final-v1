@@ -59,6 +59,10 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_svg: ^2.0.9
   flutter_screenutil: ^5.9.3
+  flutter_image_carousel_slider: ^2.0.1
+  country_icons: ^2.0.1
+  contacts_service: ^0.6.3
+  permission_handler: ^11.3.1
 
 
 
@@ -96,6 +100,7 @@ flutter:
     - assets/icons/chat.png
     - assets/images/balance.avif
     - assets/images/balance.jpeg
+    - assets/images/gameback.jpeg
     - assets/placeholder.png
     - assets/avatar.jpg
     - assets/images/coverpic.png

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:country_picker/country_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -13,6 +14,7 @@ class CreateVoiceRoomPage extends StatefulWidget {
 }
 
 class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
+  Country? selectedCountry;
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _roomNameController = TextEditingController();
@@ -215,6 +217,56 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     );
   }
 
+  void _showCountryPicker() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: false,
+      countryListTheme: CountryListThemeData(
+        borderRadius: BorderRadius.circular(12),
+        inputDecoration: InputDecoration(
+          labelText: 'Search country',
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      onSelect: (Country country) {
+        setState(() {
+          selectedCountry = country;
+          _countryController.text = country.name;
+        });
+      },
+    );
+  }
+
+  Widget _buildCountryField() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        controller: _countryController,
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: 'Country',
+          prefixIcon: Icon(Icons.flag, color: Colors.blue),
+          suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.blue),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.blue.shade200),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.blue, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.blue.shade50,
+        ),
+        validator: (value) => value?.isEmpty ?? true ? 'Please select a country' : null,
+        onTap: _showCountryPicker,
+      ),
+    );
+  }
+
   Widget _buildImageSection(bool isGroupPhoto) {
     final File? imageFile = isGroupPhoto ? groupPhoto : backgroundImage;
     return Card(
@@ -316,11 +368,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
                           readOnly: true,
                           helperText: 'Auto-generated 10-digit number',
                         ),
-                        _buildFormField(
-                          controller: _countryController,
-                          label: 'Country',
-                          icon: Icons.flag,
-                        ),
+                        _buildCountryField(),
                         _buildFormField(
                           controller: _mottoController,
                           label: 'Team Motto',

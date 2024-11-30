@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
+import 'package:country_icons/country_icons.dart';
 
 class VoiceRoom {
   final String id;
@@ -51,13 +52,26 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final List<String> _tabs = ["Mine", "Hot"];
+  final List<String> _tabs = ["Discover", "Mine"];
   List<VoiceRoom> _voiceRooms = [];
   String? _userId;
   String? _username;
   bool _isLoading = true;
   TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  List<Map<String, String>> _countries = [
+    {'name': 'Sri Lanka', 'flag': 'https://flagcdn.com/w320/lk.png'},
+    {'name': 'USA', 'flag': 'https://flagcdn.com/w320/us.png'},
+    {'name': 'UK', 'flag': 'https://flagcdn.com/w320/gb.png'},
+    {'name': 'Philippines', 'flag': 'https://flagcdn.com/w320/ph.png'},
+    {'name': 'Australia', 'flag': 'https://flagcdn.com/w320/au.png'},
+    {'name': 'Albania', 'flag': 'https://flagcdn.com/w320/al.png'},
+    {'name': 'India', 'flag': 'https://flagcdn.com/w320/in.png'},
+    {'name': 'Pakistan', 'flag': 'https://flagcdn.com/w320/pk.png'},
+    {'name': 'Bangladesh', 'flag': 'https://flagcdn.com/w320/bd.png'},
+  ];
+
 
   @override
   void initState() {
@@ -127,6 +141,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
           children: [
             _buildSearchBar(),
             _buildAdvertBanner(),
+            _buildCountriesSection(),
             TabBar(
               controller: _tabController,
               tabs: _tabs.map((String name) => Tab(text: name)).toList(),
@@ -182,12 +197,94 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         image: DecorationImage(
-          image: NetworkImage('https://picsum.photos/800/200'),
+          image: NetworkImage('https://www.perfectly-nintendo.com/wp-content/uploads/2024/07/Battle-Crush.jpg'),
           fit: BoxFit.cover,
         ),
       ),
     );
   }
+
+  Widget _buildCountriesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            'Recommend Country',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(), // Prevent scrolling within the grid
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5, // 5 columns
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 1, // Square items
+          ),
+          itemCount: _countries.length + 1, // Add one for the "All" button
+          itemBuilder: (context, index) {
+            if (index < _countries.length) {
+              final country = _countries[index];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(50), // Circular flag
+                    child: Image.network(
+                      country['flag']!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          Icon(Icons.error, color: Colors.red),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    country['name']!,
+                    style: const TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              );
+            } else {
+              // "All" button
+              return GestureDetector(
+                onTap: () {
+                  // Handle "View More Countries" action
+                  print('View More Countries tapped');
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: const Icon(Icons.more_horiz, color: Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'All',
+                      style: TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+
 
   Widget _buildVoiceRoomsList(bool isMineTab) {
     if (_isLoading) {
@@ -218,73 +315,121 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
   Widget _buildRoomCard(VoiceRoom room) {
     return Card(
-      margin: EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _navigateToLivePage(room),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-              child: CachedNetworkImage(
-                imageUrl: 'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
-                height: 150,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 150,
-                  color: Colors.grey[200],
-                  child: Center(child: CircularProgressIndicator(color: Colors.blue)),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  height: 150,
-                  color: Colors.grey[200],
-                  child: Icon(Icons.error, color: Colors.blue),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Group Photo on the left
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl:
+                  'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
+                  width: 70,
+                  height: 70,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    width: 70,
+                    height: 70,
+                    color: Colors.grey[200],
+                    child: const Center(
+                        child: CircularProgressIndicator(color: Colors.blue)),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    width: 70,
+                    height: 70,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.error, color: Colors.blue),
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          room.voiceRoomName,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+              const SizedBox(width: 12), // Space between image and text
+              // Details and Country Flag
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Voice Room Name
+                    Text(
+                      room.voiceRoomName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
-                      Text('ID: ${room.voiceRoomId}'),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // ID
+                    Text(
+                      'ID: ${room.voiceRoomId}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Team Moto in Gradient Container
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Colors.blueAccent, Colors.lightBlue],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(12),
+                          right: Radius.circular(12),
+                        ), // Rounded sides
+                      ),
+                      child: Text(
+                        room.teamMoto,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Country with Flag on the Right
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Country Flag using country_icons
+                  Image.asset(
+                    'icons/flags/png/${room.voiceRoomCountry.toLowerCase()}.png',
+                    package: 'country_icons',
+                    width: 30,
+                    height: 20,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.flag, size: 20, color: Colors.grey),
                   ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 16, color: Colors.blue),
-                      SizedBox(width: 4),
-                      Text(room.voiceRoomCountry),
-                      Spacer(),
-                      _buildTags(room.tags),
-                    ],
-                  ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    room.teamMoto,
-                    style: TextStyle(color: Colors.grey[600]),
+                    room.voiceRoomCountry,
+                    style: const TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+
 
   Widget _buildTags(String tags) {
     final tagsList = tags.split(',');

@@ -1,180 +1,187 @@
 import 'package:flutter/material.dart';
 
-class MyItemsPage extends StatefulWidget {
-  @override
-  _MyItemsPageState createState() => _MyItemsPageState();
-}
 
-class _MyItemsPageState extends State<MyItemsPage> {
-  String? selectedFrame;
-  String? selectedEffect;
+class StoreScreen extends StatelessWidget {
+  const StoreScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Dummy data for store items with network image URLs
+    final List<Map<String, dynamic>> items = [
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "1 day",
+        "price": 5000,
+      },
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "3 days",
+        "price": 15000,
+      },
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "7 days",
+        "price": 35000,
+      },
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "7 days",
+        "price": 70000,
+      },
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "3 days",
+        "price": 45000,
+      },
+      {
+        "image": "https://thumbs.dreamstime.com/b/car-gift-22638825.jpg",
+        "duration": "7 days",
+        "price": 55000,
+      },
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('My Items'),
-        backgroundColor: Colors.teal,
+        backgroundColor: Colors.blue,
+        title: const Text("Store",style: TextStyle(color: Colors.white),),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: Column(
         children: [
-          // Section for Frames
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Choose a Frame',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
+          // Tab Bar
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: ["Leo Store", "My Items"]
+                  .map((category) => Text(
+                category,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: category == "Cars" ? Colors.purple : Colors.black,
                 ),
-                SizedBox(
-                  height: 100,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      frameOption('Frame 1', Colors.red),
-                      frameOption('Frame 2', Colors.blue),
-                      frameOption('Frame 3', Colors.green),
-                      defaultOption('No Frame'),
-                    ],
-                  ),
-                ),
-              ],
+              ))
+                  .toList(),
             ),
           ),
-          Divider(),
-          // Section for Entry Effects
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Choose an Entry Effect',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.8,
                 ),
-                SizedBox(
-                  height: 100,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      effectOption('Fade In', Icons.opacity),
-                      effectOption('Slide In', Icons.arrow_forward),
-                      effectOption('Zoom In', Icons.zoom_in),
-                      defaultOption('No Effect'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(),
-          // Display Selected Frame and Effect
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Selected Frame: ${selectedFrame ?? "None"}',
-                  style: TextStyle(fontSize: 18),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Selected Effect: ${selectedEffect ?? "None"}',
-                  style: TextStyle(fontSize: 18),
-                ),
-              ],
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  return Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 4,
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Image
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                item["image"],
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          // Duration
+                          Text(
+                            item["duration"],
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          // Price
+                          Text(
+                            "💰 ${item['price']}",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          // Action Buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // Expanded(
+                              //   // child: ElevatedButton(
+                              //   //   onPressed: () {
+                              //   //     // Handle Send
+                              //   //   },
+                              //   //   style: ElevatedButton.styleFrom(
+                              //   //     backgroundColor: Colors.purple,
+                              //   //     shape: RoundedRectangleBorder(
+                              //   //       borderRadius: BorderRadius.circular(8.r),
+                              //   //     ),
+                              //   //   ),
+                              //   //   child: Text(
+                              //   //     "Send",
+                              //   //     style: TextStyle(fontSize: 12.sp),
+                              //   //   ),
+                              //   // ),
+                              // ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    // Handle Buy
+                                  },
+                                  style: OutlinedButton.styleFrom(
+
+                                    side: BorderSide(color: Colors.blue),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    "Buy Now",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold
+
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget frameOption(String name, Color color) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedFrame = name;
-        });
-      },
-      child: Container(
-        width: 80,
-        margin: EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Text(
-            name,
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget effectOption(String name, IconData icon) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedEffect = name;
-        });
-      },
-      child: Container(
-        width: 80,
-        margin: EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.teal,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white),
-              Text(
-                name,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget defaultOption(String name) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (name == 'No Frame') {
-            selectedFrame = null;
-          } else if (name == 'No Effect') {
-            selectedEffect = null;
-          }
-        });
-      },
-      child: Container(
-        width: 80,
-        margin: EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Text(
-            name,
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
       ),
     );
   }

@@ -5,23 +5,37 @@ import 'Account Section/AcccountScreen.dart';
 import 'voiceRoom/groups.dart';
 import 'chat/chat_&_calling.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+//import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'chat/Status.dart';
 
 class HomeScreen extends StatefulWidget {
+  static final GlobalKey<_HomeScreenState> homeKey = GlobalKey<_HomeScreenState>();
   final String userId;
   final String username;
 
-  HomeScreen({required this.userId, required this.username});
+  HomeScreen({required this.userId, required this.username}) : super(key: homeKey);  // Add the key here
+
+  static void setBottomBarVisibility(bool visible) {
+    homeKey.currentState?.setBottomNavVisibility(visible);
+  }
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
+
 
 class _HomeScreenState extends State<HomeScreen> {
   String username = "user";
   String userId = "";
   int _selectedIndex = 0;
   late List<Widget> _widgetOptions;
+  bool _showBottomNav = true;
+
+  void setBottomNavVisibility(bool visible) {
+    setState(() {
+      _showBottomNav = visible;
+    });
+  }
 
   @override
   void initState() {
@@ -52,9 +66,10 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Center(
         child: _widgetOptions != null
             ? _widgetOptions.elementAt(_selectedIndex)
-            : CircularProgressIndicator(),
+            : const CircularProgressIndicator(),
       ),
-      bottomNavigationBar: Container(
+      bottomNavigationBar: _showBottomNav
+          ? Container(
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
@@ -73,11 +88,11 @@ class _HomeScreenState extends State<HomeScreen> {
               gap: 8,
               activeColor: Colors.blue[700],
               iconSize: 24,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              duration: Duration(milliseconds: 400),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              duration: const Duration(milliseconds: 400),
               tabBackgroundColor: Colors.blue[50]!,
               color: Colors.black,
-              tabs: [
+              tabs: const [
                 GButton(
                   icon: LineIcons.comments,
                   text: 'Chat',
@@ -104,7 +119,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-      ),
+      )
+          : null,
     );
   }
 }
@@ -204,10 +220,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
+
+
 class GameScreen extends StatelessWidget {
+  const GameScreen({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text('Game Screen'));
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Full background image
+          Image.asset(
+            'assets/images/gameback.jpeg', // Replace with your actual asset path
+            fit: BoxFit.cover,
+          ),
+          SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Optional: Add game content here
+                Text(
+                  'Game Screen',
+                  style: TextStyle(
+                    fontSize: 24,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                // You can add more widgets like game elements, buttons, etc.
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
-

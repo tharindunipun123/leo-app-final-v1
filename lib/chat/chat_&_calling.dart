@@ -5,10 +5,11 @@ import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../HomeScreen.dart';
 import 'HomePagePopMenu.dart';
-import 'Status.dart'; // Import the status screen
+import 'Status.dart';
+import 'newcontact.dart';
 
-// Global navigator key for handling call invitations
 final navigatorKey = GlobalKey<NavigatorState>();
 
 class ChatScreen1 extends StatefulWidget {
@@ -20,20 +21,23 @@ class ChatScreen1 extends StatefulWidget {
 
 class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final int tabCount = 3;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: tabCount,
+      vsync: this,
+      initialIndex: 0,
+    );
     _tabController.addListener(_handleTabChange);
     _initializeZegoCloud();
     _fetchAndSetUserAvatar();
   }
 
   void _handleTabChange() {
-    if (_tabController.indexIsChanging) {
-      setState(() {});
-    }
+    setState(() {});
   }
 
   @override
@@ -51,9 +55,10 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
 
       if (userId.isEmpty) return;
 
-      ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
+      final callService = ZegoUIKitPrebuiltCallInvitationService();
+      callService.setNavigatorKey(navigatorKey);
 
-      await ZegoUIKitPrebuiltCallInvitationService().init(
+      await callService.init(
         appID: 1382376685,
         appSign: '0a9bce0b90584625b087d27e8e3c9a2a15ea28eb16119022da829f87c3763142',
         userID: userId,
@@ -75,9 +80,7 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
               ? ZegoUIKitPrebuiltCallConfig.oneOnOneVideoCall()
               : ZegoUIKitPrebuiltCallConfig.oneOnOneVoiceCall();
 
-          config.audioVideoViewConfig
-            ..useVideoViewAspectFill = true;
-
+          config.audioVideoViewConfig.useVideoViewAspectFill = true;
           return config;
         },
       );
@@ -119,39 +122,24 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
   Widget _buildChatTab() {
     return ZIMKitConversationListView(
       onPressed: (context, conversation, defaultAction) {
+        // Hide bottom nav before navigation
+        print("Hiding bottom nav"); // For debugging
+        HomeScreen.setBottomBarVisibility(false);
+
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ZIMKitMessageListPage(
               conversationID: conversation.id,
               conversationType: conversation.type,
-              appBarActions: conversation.type == ZIMConversationType.peer
-                  ? [
-                ZegoSendCallInvitationButton(
-                  isVideoCall: true,
-                  resourceID: 'zego_data',
-                  invitees: [
-                    ZegoUIKitUser(
-                      id: conversation.id,
-                      name: conversation.name,
-                    ),
-                  ],
-                ),
-                ZegoSendCallInvitationButton(
-                  isVideoCall: false,
-                  resourceID: 'zego_data',
-                  invitees: [
-                    ZegoUIKitUser(
-                      id: conversation.id,
-                      name: conversation.name,
-                    ),
-                  ],
-                ),
-              ]
-                  : null,
+              appBarActions: conversation.type == ZIMConversationType.peer ? [] : null,
             ),
           ),
-        );
+        ).then((_) {
+          // Show bottom nav after returning
+          print("Showing bottom nav"); // For debugging
+          HomeScreen.setBottomBarVisibility(true);
+        });
       },
     );
   }
@@ -162,17 +150,18 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
       transitionBuilder: (child, animation) {
         return FadeTransition(opacity: animation, child: child);
       },
-      child: StatusPage(), // Your StatusPage widget
+      child: StatusPage(),
     );
   }
 
-  void _handleFABPressed() {
-    const HomePagePopupMenuButton();
-    // if (_tabController.index == 0) {
-    //   // Handle chat FAB press
-    // } else {
-    //   // Handle status FAB press
-    // }
+  Widget _buildContactPage() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: NewContactAndCallHistoryScreen(),
+    );
   }
 
   @override
@@ -200,13 +189,7 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
                 fontSize: 24,
               ),
             ),
-            actions: [
-              // IconButton(
-              //   icon: Icon(Icons.search, color: Colors.blue[700]),
-              //   onPressed: () {},
-              // ),
-              const HomePagePopupMenuButton(),
-            ],
+            actions: const [HomePagePopupMenuButton()],
             bottom: TabBar(
               controller: _tabController,
               indicatorColor: Colors.blue[700],
@@ -217,8 +200,9 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
                 fontSize: 16,
               ),
               tabs: const [
-                Tab(text: 'CHATS'),
-                Tab(text: 'STATUS'),
+                Tab(icon: Icon(Icons.chat_bubble)),
+                Tab(icon: Icon(Icons.access_time)),
+                Tab(icon: Icon(Icons.people)),
               ],
             ),
           ),
@@ -227,13 +211,18 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
             children: [
               _buildChatTab(),
               _buildStatusPage(),
+              _buildContactPage(),
             ],
           ),
           floatingActionButton: FloatingActionButton(
-            onPressed: _handleFABPressed,
+            onPressed: () => const HomePagePopupMenuButton(),
             backgroundColor: Colors.blue[700],
             child: Icon(
-              _tabController.index == 0 ? Icons.chat : Icons.camera_alt,
+              _tabController.index == 0
+                  ? Icons.chat
+                  : _tabController.index == 1
+                  ? Icons.camera_alt
+                  : Icons.person_add,
             ),
           ),
         ),

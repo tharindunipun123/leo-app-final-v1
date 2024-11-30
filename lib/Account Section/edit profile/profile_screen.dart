@@ -64,47 +64,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _fetchReceivedGifts() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/collections/sending_recieving_gifts/records'),
-        headers: {'filter': 'reciever_user_id="$userId"'},
+      // First fetch all gifts
+      final allGiftsResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/gifts/records'),
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body)['items'];
-        Map<String, int> giftCounts = {};
+      if (allGiftsResponse.statusCode != 200) {
+        throw Exception('Failed to fetch gifts');
+      }
 
-        for (var item in data) {
-          String giftName = item['giftname'];
-          int count = (item['gift_count'] as num).toInt();
-          giftCounts[giftName] = (giftCounts[giftName] ?? 0) + count;
+      final allGifts = json.decode(allGiftsResponse.body)['items'] as List;
+      Map<String, Map<String, dynamic>> giftsMap = {};
+
+      // Debug: Print all gift fields
+      print('First gift data: ${allGifts.first}');
+
+      // Create gifts map
+      for (var gift in allGifts) {
+        giftsMap[gift['giftname']] = {
+          ...gift,
+          'count': 0,
+        };
+      }
+
+      // Fetch received gifts
+      final receivedResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/sending_recieving_gifts/records?filter=(reciever_user_id="$userId")'),
+      );
+
+      if (receivedResponse.statusCode != 200) {
+        throw Exception('Failed to fetch received gifts');
+      }
+
+      final receivedGifts = json.decode(receivedResponse.body)['items'] as List;
+
+      // Count gifts
+      for (var received in receivedGifts) {
+        final giftName = received['giftname'] as String;
+        final count = received['gift_count'] as int;
+
+        if (giftsMap.containsKey(giftName)) {
+          giftsMap[giftName]!['count'] = (giftsMap[giftName]!['count'] as int) + count;
         }
+      }
 
-        List<Map<String, dynamic>> giftsList = [];
-        for (var entry in giftCounts.entries) {
-          final giftResponse = await http.get(
-            Uri.parse('$baseUrl/api/collections/gifts/records'),
-            headers: {'filter': 'giftname="${entry.key}"'},
-          );
+      // Convert to list and filter out gifts with count 0
+      List<Map<String, dynamic>> giftsList = giftsMap.values
+          .where((gift) => gift['count'] > 0)
+          .map((gift) => {
+        'id': gift['id'],
+        'collectionId': gift['collectionId'],
+        // Try all possible field names for gift photo
+        'gifphoto': gift['gift_photo'] ?? gift['giftphoto'] ?? gift['gifPhoto'] ?? gift['photo'] ?? '',
+        'giftCount': gift['count'],
+        'giftName': gift['giftname'],
+      })
+          .toList();
 
-          if (giftResponse.statusCode == 200) {
-            var giftData = json.decode(giftResponse.body)['items'][0];
-            giftsList.add({
-              'id': giftData['id'],
-              'collectionId': giftData['collectionId'],
-              'gifphoto': giftData['gifphoto'],
-              'giftCount': entry.value,
-            });
-          }
-        }
+      // Sort by count
+      giftsList.sort((a, b) => (b['giftCount'] as int).compareTo(a['giftCount'] as int));
+
+      if (mounted) {
         setState(() {
           gifts = giftsList;
         });
       }
+
+      // Debug log
+      for (var gift in giftsList) {
+        print('\nGift details:');
+        print('Name: ${gift['giftName']}');
+        print('ID: ${gift['id']}');
+        print('CollectionId: ${gift['collectionId']}');
+        print('Photo field: ${gift['gifphoto']}');
+        print('Full URL: $baseUrl/api/files/${gift['collectionId']}/${gift['id']}/${gift['gifphoto']}');
+      }
+
     } catch (e) {
       debugPrint('Error fetching gifts: $e');
     }
   }
-
   Future<void> _fetchUserBadges() async {
     try {
       final response = await http.get(
@@ -229,9 +268,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             separatorBuilder: (_, __) => SizedBox(width: 20.w),
             itemBuilder: (context, index) {
               final gift = gifts![index];
-              return GiftItem(
-                icon: '$baseUrl/api/files/${gift['collectionId']}/${gift['id']}/${gift['gifphoto']}',
-                text: 'x${gift['giftCount']}',
+              final imageUrl = '$baseUrl/api/files/${gift['collectionId']}/${gift['id']}/${gift['gifphoto']}';
+              return Column(
+                children: [
+                  Image.network(
+                    imageUrl,
+                    width: 50.w,
+                    height: 50.w,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(Icons.error, size: 50.w);
+                    },
+                  ),
+                  Text('x${gift['giftCount']}')
+                ],
               );
             },
           ),
