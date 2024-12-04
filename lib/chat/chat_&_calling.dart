@@ -160,7 +160,7 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
       transitionBuilder: (child, animation) {
         return FadeTransition(opacity: animation, child: child);
       },
-      child: NewContactAndCallHistoryScreen(),
+      //child: NewContactAndCallHistoryScreen(),
     );
   }
 

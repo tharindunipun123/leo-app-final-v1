@@ -14,6 +14,7 @@ class GiftData {
   final String giftPhoto;
   final String collectionId;
   final String collectionName;
+  final String category; // Added category field
 
   GiftData({
     required this.id,
@@ -23,6 +24,7 @@ class GiftData {
     required this.giftPhoto,
     required this.collectionId,
     required this.collectionName,
+    required this.category, // Added to constructor
   });
 
   factory GiftData.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class GiftData {
       giftPhoto: json['gift_photo'],
       collectionId: json['collectionId'],
       collectionName: json['collectionName'],
+      category: json['catagory'] ?? '', // Added to fromJson, note the API uses 'catagory'
     );
   }
 
@@ -64,7 +67,6 @@ class GiftData {
     );
   }
 
-
   ZegoGiftType _determineGiftType(String fileName) {
     final extension = fileName.toLowerCase().split('.').last;
     switch (extension) {
@@ -77,7 +79,6 @@ class GiftData {
     }
   }
 }
-
 class User {
   final String id;
   final String username;
@@ -144,12 +145,18 @@ class ZegoGiftSheet extends StatefulWidget {
   State<ZegoGiftSheet> createState() => _ZegoGiftSheetState();
 }
 
-class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
+class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProviderStateMixin{
   bool _showUserList = false;
   final Color selectedColor = const Color(0xFF2196F3);
   final selectedGiftItemNotifier = ValueNotifier<ZegoGiftItem?>(null);
   final countNotifier = ValueNotifier<String>('1');
   final selectedUserNotifier = ValueNotifier<User?>(null);
+
+  late TabController _tabController;
+  List<GiftCategory> categories = [];
+  Map<String, List<ZegoGiftItem>> categorizedGifts = {};
+  bool isLoadingCategories = true;
+
   List<User> users = [];
   List<ZegoGiftItem> giftItems = [];
   String? loggedUserId;
@@ -166,16 +173,21 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
   Future<void> _initializeData() async {
     setState(() => isLoading = true);
     try {
-      await _loadLoggedUserId();
+      await Future.wait([_loadLoggedUserId(),
+      _loadCategories()]);
       await Future.wait([
         _loadUsers(),
         _loadGifts(),
       ]);
+      _initializeTabController();
     } catch (e) {
       print('Error initializing data: $e');
     } finally {
       if (mounted) {
-        setState(() => isLoading = false);
+        setState(() {
+          isLoading = false;
+          isLoadingCategories = false;
+        });
       }
     }
   }
@@ -185,6 +197,35 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
     loggedUserId = prefs.getString('userId');
     if (loggedUserId != null) {
       await _loadUserBalance();
+    }
+  }
+
+  void _initializeTabController() {
+    _tabController = TabController(
+      length: categories.length,
+      vsync: this,
+    );
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$pocketbaseUrl/api/collections/gift_catagory/records'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        categories = (data['items'] as List)
+            .map((item) => GiftCategory.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error loading categories: $e');
     }
   }
 
@@ -200,11 +241,17 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
             .map((item) => GiftData.fromJson(item))
             .toList();
 
+        // Organize gifts by category
+        categorizedGifts.clear();
+        for (var category in categories) {
+          categorizedGifts[category.id] = gifts
+              .where((gift) => gift.category == category.categoryName)
+              .map((gift) => gift.toZegoGiftItem(pocketbaseUrl))
+              .toList();
+        }
+
         if (mounted) {
-          setState(() {
-            giftItems = gifts.map((gift) => gift.toZegoGiftItem(pocketbaseUrl)).toList();
-            giftItems.sort((a, b) => a.weight.compareTo(b.weight));
-          });
+          setState(() {});
         }
       }
     } catch (e) {
@@ -240,16 +287,43 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
 
   Future<void> _loadUsers() async {
     try {
-      final response = await http.get(
-        Uri.parse('$pocketbaseUrl/api/collections/users/records?perPage=100'),
+      // First, fetch online users in this voice room
+      final onlineUsersResponse = await http.get(
+        Uri.parse('$pocketbaseUrl/api/collections/online_users/records')
+            .replace(queryParameters: {
+          'filter': 'userId="${loggedUserId}"',
+        }),
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (loggedUserId != null) {
+      if (onlineUsersResponse.statusCode == 200) {
+        final onlineUsersData = json.decode(onlineUsersResponse.body);
+        final onlineUserIds = (onlineUsersData['items'] as List)
+            .map((item) => item['userId'] as String)
+            .where((userId) => userId != loggedUserId) // Exclude current user
+            .toList();
+
+        if (onlineUserIds.isEmpty) {
+          setState(() {
+            users = [];
+          });
+          return;
+        }
+
+        // Create filter for users who are online in this room
+        final userFilter = onlineUserIds.map((id) => 'id="$id"').join('||');
+
+        // Fetch user details for online users
+        final response = await http.get(
+          Uri.parse('$pocketbaseUrl/api/collections/users/records')
+              .replace(queryParameters: {
+            'filter': userFilter,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
           final List<User> loadedUsers = (data['items'] as List)
               .map((item) => User.fromJson(item))
-              .where((user) => user.id != loggedUserId)
               .toList();
 
           if (mounted) {
@@ -393,6 +467,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
       }
 
       final totalCost = giftItem.weight * count.toDouble();
+      final rewardAmount = totalCost * 0.4; // 40% of total cost
 
       if (await _checkAndUpdateBalance(totalCost)) {
         // Send to PocketBase first
@@ -411,6 +486,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
         if (response.statusCode == 200) {
           try {
             await _handleGiftPlayback(giftItem, count);
+            await _updateReceiverWallet(receiver.id, rewardAmount);
             if (mounted) {
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -446,6 +522,41 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
     }
   }
 
+
+  Future<void> _updateReceiverWallet(String receiverId, double rewardAmount) async {
+    try {
+      // Fetch current wallet balance
+      final fetchResponse = await http.get(
+        Uri.parse('$pocketbaseUrl/api/collections/users/records/$receiverId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (fetchResponse.statusCode == 200) {
+        final data = jsonDecode(fetchResponse.body);
+        final currentBalance = data['wallet'] ?? 0;
+
+        // Calculate new balance
+        final newBalance = currentBalance + rewardAmount;
+
+        // Update wallet balance
+        final updateResponse = await http.patch(
+          Uri.parse('$pocketbaseUrl/api/collections/users/records/$receiverId'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'wallet': newBalance}),
+        );
+
+        if (updateResponse.statusCode != 200) {
+          throw Exception('Failed to update wallet balance');
+        }
+      } else {
+        throw Exception('Failed to fetch receiver wallet details');
+      }
+    } catch (e) {
+      print('Error updating receiver wallet: $e');
+      throw Exception('Error updating wallet balance: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -467,27 +578,29 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Padding(
-            //   padding: const EdgeInsets.only(bottom: 10),
-            //   child: Row(
-            //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            //     children: [
-            //       const Text(
-            //         'Send Gift',
-            //         style: TextStyle(
-            //           color: Colors.white,
-            //           fontSize: 16,
-            //           fontWeight: FontWeight.bold,
-            //         ),
-            //       ),
-            //       _buildCompactBalanceDisplay(),
-            //     ],
-            //   ),
-            // ),
             _buildSelectedUserDisplay(),
-            Expanded(
-              child: giftGrid(),
-            ),
+            if (!isLoadingCategories && categories.isNotEmpty) ...[
+              TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabs: categories.map((category) {
+                  return Tab(
+                    text: category.categoryName,
+                  );
+                }).toList(),
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white.withOpacity(0.5),
+                indicatorColor: selectedColor,
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: categories.map((category) {
+                    return _buildGiftGridForCategory(category.id);
+                  }).toList(),
+                ),
+              ),
+            ],
             Container(
               padding: const EdgeInsets.only(top: 10),
               decoration: BoxDecoration(
@@ -535,6 +648,109 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
       ],
     );
   }
+
+  Widget _buildGiftGridForCategory(String categoryId) {
+    final gifts = categorizedGifts[categoryId] ?? [];
+
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.75,
+      ),
+      itemCount: gifts.length,
+      itemBuilder: (context, index) {
+        final item = gifts[index];
+        return GestureDetector(
+          onTap: () => selectedGiftItemNotifier.value = item,
+          child: ValueListenableBuilder<ZegoGiftItem?>(
+            valueListenable: selectedGiftItemNotifier,
+            builder: (context, selectedGiftItem, _) {
+              final isSelected = selectedGiftItem?.name == item.name;
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? selectedColor : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: item.icon.isEmpty
+                          ? Icon(Icons.card_giftcard, color: selectedColor, size: 40)
+                          : Image.network(
+                        item.icon,
+                        width: 45,
+                        height: 45,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(Icons.card_giftcard, color: selectedColor, size: 40);
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const SizedBox(
+                            width: 45,
+                            height: 45,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/diamond.png',
+                          width: 12,
+                          height: 12,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          item.weight.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+
 
   Widget _buildSelectedUserDisplay() {
     return ValueListenableBuilder<User?>(
@@ -1037,9 +1253,29 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     selectedGiftItemNotifier.dispose();
     countNotifier.dispose();
     selectedUserNotifier.dispose();
     super.dispose();
+  }
+}
+
+
+
+class GiftCategory {
+  final String id;
+  final String categoryName;
+
+  GiftCategory({
+    required this.id,
+    required this.categoryName,
+  });
+
+  factory GiftCategory.fromJson(Map<String, dynamic> json) {
+    return GiftCategory(
+      id: json['id'],
+      categoryName: json['catagory_name'],
+    );
   }
 }

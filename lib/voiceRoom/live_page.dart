@@ -35,6 +35,8 @@ class LivePage extends StatefulWidget {
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _glowAnimation;
+  String? _onlineUserRecordId;
+  String? _groupPhotoUrl;
   String? _userAvatarUrl;
   String? _voiceRoomName;
   String? _backgroundImageUrl;
@@ -56,6 +58,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       // Fetch avatar URL when component mounts
       _fetchAndSetUserAvatar();
       _fetchVoiceRoomDetails();
+      _createOnlineUserRecord();
     });
 
     _controller = AnimationController(
@@ -80,6 +83,33 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           count: 1
       ));
     });
+  }
+
+
+
+  Future<void> _createOnlineUserRecord() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$POCKETBASE_URL/api/collections/online_users/records'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'userId': widget.userId,
+          'voiceRoomId': widget.roomID,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _onlineUserRecordId = data['id']; // Store the record ID for later deletion
+        print('Created online user record: $_onlineUserRecordId');
+      } else {
+        print('Failed to create online user record: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error creating online user record: $e');
+    }
   }
 
 
@@ -121,11 +151,39 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
+  Future<void> _handleLogout() async {
+    try {
+      // Delete the online user record
+      if (_onlineUserRecordId != null) {
+        await http.delete(
+          Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        );
+      }
+
+      // Leave the Zego room
+      await ZegoUIKitPrebuiltLiveAudioRoomController().leave(context, showConfirmation: false);
+
+      // Navigate back if still mounted
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print('Error during logout: $e');
+      // Still try to navigate back even if there was an error
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
   Future<void> _fetchVoiceRoomDetails() async {
     try {
       final uri = Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}')
           .replace(queryParameters: {
-        'fields': 'voice_room_name,background_images',
+        'fields': 'voice_room_name,background_images,group_photo',
       });
 
       final response = await http.get(
@@ -139,7 +197,15 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           _voiceRoomName = data['voice_room_name'];
           if (data['background_images'] != null) {
             _backgroundImageUrl = '$POCKETBASE_URL/api/files/voiceRooms/${widget.roomID}/${data['background_images']}';
+            _groupPhotoUrl = '$POCKETBASE_URL/api/files/voiceRooms/${widget.roomID}/${data['group_photo']}';
+
           }
+
+          if (data['group_photo'] != null) {
+
+          }
+          print("-----------------------------------------------------------------");
+          print(_groupPhotoUrl);
         });
       }
     } catch (e) {
@@ -149,6 +215,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   @override
   void dispose() {
+
     _controller.dispose();
     super.dispose();
     ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
@@ -242,6 +309,40 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             config: config,
           ),
 
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            right: 10,
+            child: GestureDetector(
+              onTap: () => _showLogoutDialog(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.logout,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Leave',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
           // Responsive Room Info Overlay
           Positioned(
             top: MediaQuery.of(context).padding.top + 55, // Lowered position
@@ -288,9 +389,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: _backgroundImageUrl != null
+                          child: _groupPhotoUrl != null
                               ? Image.network(
-                            _backgroundImageUrl!,
+                            _groupPhotoUrl!,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) =>
                                 Icon(Icons.image, size: 20, color: Colors.white54),
@@ -338,6 +439,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   ),
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave Room'),
+        content: const Text('Are you sure you want to leave this room?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              await _handleLogout();
+            },
+            child: const Text(
+              'Leave',
+              style: TextStyle(color: Colors.red),
             ),
           ),
         ],
