@@ -153,26 +153,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   Future<void> _handleLogout() async {
     try {
-      // Delete the online user record
+      // First uninitialize ZEGO services
+      ZegoGiftManager().service.uninit();
+
+      // Leave the Zego room with proper cleanup
+      await ZegoUIKit().leaveRoom();
+
+      // Then delete the online user record
       if (_onlineUserRecordId != null) {
-        await http.delete(
-          Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        );
+        try {
+          await http.delete(
+            Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          );
+        } catch (e) {
+          print('Error deleting online user record: $e');
+        }
       }
 
-      // Leave the Zego room
-      await ZegoUIKitPrebuiltLiveAudioRoomController().leave(context, showConfirmation: false);
-
-      // Navigate back if still mounted
+      // Finally navigate back
       if (mounted) {
         Navigator.of(context).pop();
       }
     } catch (e) {
       print('Error during logout: $e');
-      // Still try to navigate back even if there was an error
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -216,10 +222,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   @override
   void dispose() {
 
-    _controller.dispose();
-    super.dispose();
+
+
     ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
     ZegoGiftManager().service.uninit();
+
+    _controller.dispose();
+
+    if (_onlineUserRecordId != null) {
+      http.delete(
+        Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
+        headers: {'Content-Type': 'application/json'},
+      ).catchError((e) => print('Error cleaning up online user record: $e'));
+
+    }
+
+    super.dispose();
+
   }
 
   bool isAttributeHost(Map<String, String>? userInRoomAttributes) {
@@ -317,24 +336,25 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.8),
+                  color: Colors.red,  // Removed opacity
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(  // Removed const since we want to modify children
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.logout,
                       color: Colors.white,
                       size: 20,
                     ),
-                    SizedBox(width: 5),
-                    Text(
+                    const SizedBox(width: 5),
+                    Text(  // Removed const to prevent decoration underline warning
                       'Leave',
-                      style: TextStyle(
+                      style: TextStyle(  // Removed const and fixed text decoration
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.none,  // This removes the underline
                       ),
                     ),
                   ],
@@ -783,7 +803,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             builder: (context, child) {
               return InkWell(
                 onTap: () {
-                  showGiftListSheet(context);
+                  showGiftListSheet(context , widget.roomID);
                 },
                 child: Container(
                   width: 48,

@@ -109,7 +109,8 @@ class User {
   }
 }
 
-void showGiftListSheet(BuildContext context) {
+void showGiftListSheet(BuildContext context,String roomId) {
+  //String roomids = roomId;
   showModalBottomSheet(
     backgroundColor: Colors.black.withOpacity(0.8),
     context: context,
@@ -130,7 +131,7 @@ void showGiftListSheet(BuildContext context) {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
           child: SizedBox(
             height: MediaQuery.of(context).size.height * 0.45, // Reduced height
-            child: const ZegoGiftSheet(),
+            child:  ZegoGiftSheet(roomId: roomId),
           ),
         ),
       );
@@ -139,7 +140,12 @@ void showGiftListSheet(BuildContext context) {
 }
 
 class ZegoGiftSheet extends StatefulWidget {
-  const ZegoGiftSheet({Key? key}) : super(key: key);
+  final String roomId;
+
+  const ZegoGiftSheet({
+    Key? key,
+    required this.roomId,
+  }) : super(key: key);
 
   @override
   State<ZegoGiftSheet> createState() => _ZegoGiftSheetState();
@@ -287,54 +293,86 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
 
   Future<void> _loadUsers() async {
     try {
-      // First, fetch online users in this voice room
+      if (loggedUserId == null) {
+        print('LoggedUserId is null, cannot load users');
+        return;
+      }
+
+      print('Loading users with logged user ID: $loggedUserId');
+
+      // Get all online users from this room
       final onlineUsersResponse = await http.get(
         Uri.parse('$pocketbaseUrl/api/collections/online_users/records')
             .replace(queryParameters: {
-          'filter': 'userId="${loggedUserId}"',
+          'filter': 'voiceRoomId="${widget.roomId}"',  // Filter by room ID
         }),
       );
 
       if (onlineUsersResponse.statusCode == 200) {
         final onlineUsersData = json.decode(onlineUsersResponse.body);
-        final onlineUserIds = (onlineUsersData['items'] as List)
-            .map((item) => item['userId'] as String)
-            .where((userId) => userId != loggedUserId) // Exclude current user
-            .toList();
+        print('Online users data: ${onlineUsersData['items']}');
 
-        if (onlineUserIds.isEmpty) {
+        if (onlineUsersData['items'].isEmpty) {
+          print('No online users found in room');
           setState(() {
             users = [];
           });
           return;
         }
 
-        // Create filter for users who are online in this room
-        final userFilter = onlineUserIds.map((id) => 'id="$id"').join('||');
-
-        // Fetch user details for online users
-        final response = await http.get(
-          Uri.parse('$pocketbaseUrl/api/collections/users/records')
-              .replace(queryParameters: {
-            'filter': userFilter,
-          }),
-        );
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          final List<User> loadedUsers = (data['items'] as List)
-              .map((item) => User.fromJson(item))
-              .toList();
-
-          if (mounted) {
-            setState(() {
-              users = loadedUsers;
-            });
+        // Get all online user IDs except current user
+        List<String> onlineUserIds = [];
+        for (var item in onlineUsersData['items']) {
+          final userId = item['userId'] as String;
+          if (userId != loggedUserId) {
+            onlineUserIds.add(userId);
           }
         }
+
+        print('Found online user IDs in room: $onlineUserIds');
+
+        if (onlineUserIds.isEmpty) {
+          print('No other online users found in room');
+          setState(() {
+            users = [];
+          });
+          return;
+        }
+
+        // Load details for each online user
+        List<User> loadedUsers = [];
+        for (String userId in onlineUserIds) {
+          try {
+            print('Fetching details for user: $userId');
+            final userResponse = await http.get(
+              Uri.parse('$pocketbaseUrl/api/collections/users/records/$userId'),
+            );
+
+            if (userResponse.statusCode == 200) {
+              final userData = json.decode(userResponse.body);
+              final user = User.fromJson(userData);
+              print('Successfully loaded user: ${user.username}');
+              loadedUsers.add(user);
+            } else {
+              print('Failed to load user $userId: ${userResponse.statusCode}');
+            }
+          } catch (e) {
+            print('Error loading user $userId: $e');
+          }
+        }
+
+        print('Total users loaded from room: ${loadedUsers.length}');
+
+        if (mounted) {
+          setState(() {
+            users = loadedUsers;
+          });
+        }
+      } else {
+        print('Failed to fetch online users: ${onlineUsersResponse.statusCode}');
       }
     } catch (e) {
-      print('Error loading users: $e');
+      print('Error in _loadUsers: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Error loading users')),
@@ -342,6 +380,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
       }
     }
   }
+
 
   Future<bool> _checkAndUpdateBalance(double giftCost) async {
     if (userBalance == null || userBalance! < giftCost) return false;
@@ -580,17 +619,25 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
             ),
             _buildSelectedUserDisplay(),
             if (!isLoadingCategories && categories.isNotEmpty) ...[
-              TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabs: categories.map((category) {
-                  return Tab(
-                    text: category.categoryName,
-                  );
-                }).toList(),
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white.withOpacity(0.5),
-                indicatorColor: selectedColor,
+              Container(
+                margin: EdgeInsets.zero, // Remove any margin
+                padding: EdgeInsets.zero, // Remove any padding
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  padding: EdgeInsets.zero, // Remove padding around the TabBar
+                  indicatorPadding: EdgeInsets.zero, // Remove padding around the indicator
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 16), // Adjust tab label padding
+                  tabAlignment: TabAlignment.start, // Align tabs to start
+                  tabs: categories.map((category) {
+                    return Tab(
+                      text: category.categoryName,
+                    );
+                  }).toList(),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white.withOpacity(0.5),
+                  indicatorColor: selectedColor,
+                ),
               ),
               Expanded(
                 child: TabBarView(
@@ -750,17 +797,33 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
     );
   }
 
-
-
   Widget _buildSelectedUserDisplay() {
     return ValueListenableBuilder<User?>(
       valueListenable: selectedUserNotifier,
       builder: (context, selectedUser, _) {
         return GestureDetector(
-          onTap: () {
+          onTap: () async {
+            // First ensure we have the logged user ID
+            if (loggedUserId == null) {
+              await _loadLoggedUserId();
+            }
+
             setState(() {
-              _showUserList = !_showUserList;
+              isLoading = true;  // Show loading state
             });
+
+            try {
+              await _loadUsers();  // Reload users
+            } catch (e) {
+              print('Error loading users: $e');
+            } finally {
+              if (mounted) {
+                setState(() {
+                  isLoading = false;
+                  _showUserList = !_showUserList;
+                });
+              }
+            }
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -772,7 +835,18 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
                 color: Colors.white.withOpacity(0.1),
               ),
             ),
-            child: Row(
+            child: isLoading
+                ? const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              ),
+            )
+                : Row(
               children: [
                 if (selectedUser != null) ...[
                   CircleAvatar(
@@ -820,6 +894,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
       },
     );
   }
+
   Widget _buildUserListOverlay() {
     return GestureDetector(
       onTap: () {
