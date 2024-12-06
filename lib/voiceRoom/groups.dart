@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 import 'package:country_icons/country_icons.dart';
+import 'package:country_picker/country_picker.dart';
 
 class VoiceRoom {
   final String id;
@@ -51,6 +52,14 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
+
+  String? _selectedCountry;
+  bool _showCountryDialog = false;
+  TextEditingController _countrySearchController = TextEditingController();
+
+  bool _isSearchingById = false;
+  TextEditingController _roomIdController = TextEditingController();
+
   late TabController _tabController;
   final List<String> _tabs = ["Discover", "Mine"];
   List<VoiceRoom> _voiceRooms = [];
@@ -73,6 +82,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   ];
 
 
+
   @override
   void initState() {
     super.initState();
@@ -88,9 +98,31 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     });
   }
 
+  List<VoiceRoom> get filteredRoomsByCountry {
+    var rooms = filteredRooms;
+
+    // Filter by country if selected
+    if (_selectedCountry != null) {
+      rooms = rooms.where((room) {
+        return room.voiceRoomCountry.toLowerCase() == _selectedCountry!.toLowerCase();
+      }).toList();
+    }
+
+    // Filter by room ID if searching
+    if (_isSearchingById && _roomIdController.text.isNotEmpty) {
+      rooms = rooms.where((room) {
+        return room.voiceRoomId.toString().contains(_roomIdController.text);
+      }).toList();
+    }
+
+    return rooms;
+  }
+
   List<VoiceRoom> get filteredRooms {
     return _voiceRooms.where((room) {
-      return room.voiceRoomName.toLowerCase().contains(_searchQuery);
+      final query = _searchQuery.toLowerCase();
+      return room.voiceRoomName.toLowerCase().contains(query) ||
+          room.voiceRoomId.toString().toLowerCase().contains(query);
     }).toList();
   }
 
@@ -140,31 +172,35 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         child: Column(
           children: [
             _buildSearchBar(),
-            _buildAdvertBanner(),
-            _buildCountriesSection(),
-            TabBar(
-              controller: _tabController,
-              tabs: _tabs.map((String name) => Tab(text: name)).toList(),
-              labelColor: Colors.blue[700],
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.blue[700],
-            ),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildVoiceRoomsList(true),
-                  _buildVoiceRoomsList(false),
-                ],
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildStatsSquares(),
+                    _buildCountriesSection(),
+                    TabBar(
+                      controller: _tabController,
+                      tabs: _tabs.map((String name) => Tab(text: name)).toList(),
+                      labelColor: Colors.blue[700],
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.blue[700],
+                    ),
+                    Container(
+                      height: MediaQuery.of(context).size.height - 350, // Adjust this value as needed
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildVoiceRoomsList(true),
+                          _buildVoiceRoomsList(false),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToCreateRoom,
-        backgroundColor: Colors.blue,
-        child: Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -173,23 +209,45 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     return Container(
       padding: EdgeInsets.all(16),
       color: Colors.lightBlue[50],
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search voice rooms...',
-          prefixIcon: Icon(Icons.search, color: Colors.blue),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
-            borderSide: BorderSide.none,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.7,
+              child: TextField(
+                controller: _searchController,
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search by room name or ID...',
+                  prefixIcon: Icon(Icons.search, color: Colors.blue),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+              ),
+            ),
           ),
-          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        ),
+          SizedBox(width: 12),
+          GestureDetector(
+            onTap: _navigateToCreateRoom,
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Icon(Icons.add, color: Colors.white, size: 24),
+            ),
+          ),
+        ],
       ),
     );
   }
-
   Widget _buildAdvertBanner() {
     return Container(
       height: 100,
@@ -204,114 +262,426 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildCountriesSection() {
+  Widget _buildVoiceRoomsList(bool isDiscoverTab) {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator(color: Colors.blue));
+    }
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            'Recommend Country',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(), // Prevent scrolling within the grid
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5, // 5 columns
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 1, // Square items
-          ),
-          itemCount: _countries.length + 1, // Add one for the "All" button
-          itemBuilder: (context, index) {
-            if (index < _countries.length) {
-              final country = _countries[index];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(50), // Circular flag
-                    child: Image.network(
-                      country['flag']!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Icon(Icons.error, color: Colors.red),
-                    ),
+        if (isDiscoverTab)
+        Expanded(
+          child: Builder(
+            builder: (context) {
+              final roomsToShow = isDiscoverTab
+                  ? filteredRoomsByCountry
+                  : filteredRooms.where((room) => room.ownerId == _userId).toList();
+
+              if (roomsToShow.isEmpty) {
+                return Center(
+                  child: Text(
+                    _getEmptyMessage(isDiscoverTab),
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    country['name']!,
-                    style: const TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                );
+              }
+
+              return ListView.builder(
+                padding: EdgeInsets.all(16),
+                itemCount: roomsToShow.length,
+                itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
               );
-            } else {
-              // "All" button
-              return GestureDetector(
-                onTap: () {
-                  // Handle "View More Countries" action
-                  print('View More Countries tapped');
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: const Icon(Icons.more_horiz, color: Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'All',
-                      style: TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-          },
+            },
+          ),
         ),
       ],
     );
   }
 
-
-  Widget _buildVoiceRoomsList(bool isMineTab) {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator(color: Colors.blue));
+  String _getEmptyMessage(bool isDiscoverTab) {
+    if (isDiscoverTab) {
+      if (_isSearchingById) {
+        return 'No rooms found with this ID';
+      } else if (_selectedCountry != null) {
+        return 'No rooms found in ${_selectedCountry}';
+      }
+      return 'No voice rooms found';
     }
+    return 'You haven\'t created any rooms yet';
+  }
 
-    final roomsToShow = isMineTab
-        ? filteredRooms.where((room) => room.ownerId == _userId).toList()
-        : filteredRooms;
+  Widget _buildStatsSquares() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Family Square - Turquoise to Mint gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF40E0D0),  // Turquoise
+                    Color(0xFF48F3D1),  // Mint
+                  ],
+                  stops: [0.2, 0.9],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFF40E0D0).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.family_restroom, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Family',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
-    if (roomsToShow.isEmpty) {
-      return Center(
-        child: Text(
-          _searchQuery.isEmpty
-              ? 'No voice rooms found'
-              : 'No matching voice rooms found',
-          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-        ),
-      );
-    }
+          // Rank Square - Golden Sunset gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFFFB347),  // Light Orange
+                    Color(0xFFFFE5B4),  // Peach
+                  ],
+                  stops: [0.2, 0.9],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFFFFB347).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.workspace_premium, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Rank',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: roomsToShow.length,
-      itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
+          // Couple Square - Soft Rose gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.only(left: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFFF6B95),  // Rose Pink
+                    Color(0xFFFFB6C1),  // Light Pink
+                  ],
+                  stops: [0.2, 0.9],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFFFF6B95).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.favorite, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Couple',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  Widget _buildCountriesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Popular Countries',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              if (_selectedCountry != null)
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCountry = null;
+                    });
+                  },
+                  child: Text(
+                    'Clear Filter',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // First Row of Countries
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _countries.take(5).map((country) => _buildCountryItem(country)).toList(),
+          ),
+        ),
+        SizedBox(height: 12),
+        // Second Row of Countries
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ..._countries.skip(5).take(4).map((country) => _buildCountryItem(country)).toList(),
+              // More button
+              GestureDetector(
+                onTap: _showCountryPicker,
+                child: Container(
+                  width: 60,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(Icons.more_horiz, color: Colors.grey[600]),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'More',
+                        style: TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCountryItem(Map<String, String> country) {
+    final isSelected = _selectedCountry == country['name'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = isSelected ? null : country['name'];
+        });
+      },
+      child: Container(
+        width: 45, // Reduced width
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isSelected ? Colors.blue : Colors.grey.shade300,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(25), // More oval shape
+                color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      country['flag']!,
+                      width: 24, // Smaller flag
+                      height: 24,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              country['name']!,
+              style: TextStyle(
+                fontSize: 10, // Smaller text
+                color: isSelected ? Colors.blue : Colors.black87,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCountrySearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final filteredCountries = _countries.where((country) {
+            return country['name']!.toLowerCase()
+                .contains(_countrySearchController.text.toLowerCase());
+          }).toList();
+
+          return AlertDialog(
+            title: Text('Select Country'),
+            content: Container(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _countrySearchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search country...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  SizedBox(height: 16),
+                  Container(
+                    height: 300,
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filteredCountries.length,
+                      itemBuilder: (context, index) {
+                        final country = filteredCountries[index];
+                        return ListTile(
+                          leading: Image.network(
+                            country['flag']!,
+                            width: 24,
+                            height: 24,
+                          ),
+                          title: Text(country['name']!),
+                          onTap: () {
+                            this.setState(() {
+                              _selectedCountry = country['name'];
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: false,
+      countryListTheme: CountryListThemeData(
+        flagSize: 25,
+        backgroundColor: Colors.white,
+        textStyle: TextStyle(fontSize: 16, color: Colors.black),
+        bottomSheetHeight: 500,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20.0),
+          topRight: Radius.circular(20.0),
+        ),
+        inputDecoration: InputDecoration(
+          labelText: 'Search',
+          hintText: 'Start typing to search',
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.blue),
+          ),
+        ),
+      ),
+      onSelect: (Country country) {
+        setState(() {
+          _selectedCountry = country.name;
+        });
+      },
+    );
+  }
+
+
+
 
   Widget _buildRoomCard(VoiceRoom room) {
     return Card(
@@ -429,6 +799,37 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
+  //
+  // Widget _buildDiscoverHeader() {
+  //   return Container(
+  //     padding: EdgeInsets.all(16),
+  //     child: Row(
+  //       children: [
+  //         Expanded(
+  //           child: TextField(
+  //             controller: _roomIdController,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(
+  //               hintText: 'Search by Room ID...',
+  //               prefixIcon: Icon(Icons.search),
+  //               filled: true,
+  //               fillColor: Colors.grey[100],
+  //               border: OutlineInputBorder(
+  //                 borderRadius: BorderRadius.circular(30),
+  //                 borderSide: BorderSide.none,
+  //               ),
+  //             ),
+  //             onChanged: (value) {
+  //               setState(() {
+  //                 _isSearchingById = value.isNotEmpty;
+  //               });
+  //             },
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
 
   Widget _buildTags(String tags) {
