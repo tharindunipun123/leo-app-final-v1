@@ -100,6 +100,7 @@ class _nobelcartState extends State<nobelcart> {
                   padding: EdgeInsets.only(
                       top: height / 65, left: width / 45, right: width / 45,bottom: height/80),
                   child: Container(
+                    
                     decoration: BoxDecoration(
                       image: DecorationImage(
                         image: AssetImage(widget.nobelbatch),
@@ -114,7 +115,7 @@ class _nobelcartState extends State<nobelcart> {
                             child: Container(
                               decoration: BoxDecoration(
                                 image: DecorationImage(
-                                  image: AssetImage(widget.img[index]),
+                                  image: NetworkImage(widget.img[index]),
                                   fit: BoxFit.scaleDown,
                                   scale: 2,
                                 ),

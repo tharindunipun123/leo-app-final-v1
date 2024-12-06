@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'countdown.dart';
+import 'package:nobel_project/countdown.dart';
 
 class rankingcontainer extends StatefulWidget {
   String ? name;
