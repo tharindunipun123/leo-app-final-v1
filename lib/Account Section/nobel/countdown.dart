@@ -1,27 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:pocketbase/pocketbase.dart';
 
 class CountdownScreen extends StatefulWidget {
-  final VoidCallback onCountdownEnd;
-
-  CountdownScreen({required this.onCountdownEnd});
-
   @override
   _CountdownScreenState createState() => _CountdownScreenState();
 }
 
 class _CountdownScreenState extends State<CountdownScreen> {
+  final PocketBase pb = PocketBase('http://145.223.21.62:8090');
+  Timer? timer;
   int days = 0;
   int hours = 0;
   int minutes = 0;
-  Timer? timer;
 
   @override
   void initState() {
     super.initState();
-    fetchCountdown(); // Initial fetch when the widget initializes
-    timer = Timer.periodic(Duration(minutes: 1), (Timer t) => fetchCountdown());
+    fetchCountdown(); // Fetch countdown timer from PocketBase
+    setupPeriodicRefresh(); // Refresh every minute
   }
 
   @override
@@ -30,31 +27,88 @@ class _CountdownScreenState extends State<CountdownScreen> {
     super.dispose();
   }
 
+  // Fetch the timer data from PocketBase
   Future<void> fetchCountdown() async {
-    final response =
-        await http.get(Uri.parse('http://172.20.10.2:6060/api/time/countdown'));
-    if (response.statusCode == 200) {
-      final String countdownFromServer =
-          response.body.trim(); // Trim any leading/trailing whitespace
+    try {
+      // Fetch the timer record with a filter
+      final response = await pb.collection('timers').getList(
+        filter: 'name = "countdown_timer"',
+        perPage: 1,
+      );
 
-      // Split the string into days, hours, and minutes
-      List<String> parts = countdownFromServer.split(' ');
-      if (parts.length == 6) {
-        setState(() {
-          days = int.parse(parts[0]);
-          hours = int.parse(parts[2]);
-          minutes = int.parse(parts[4]);
-        });
+      if (response.items.isNotEmpty) {
+        final record = response.items.first; // Get the first record
+        print('Fetched record: ${record.data}');
 
-        // Check if the countdown has ended
-        if (days == 0 && hours == 0 && minutes == 0) {
-          widget.onCountdownEnd();
+        // Parse endTime as UTC
+        DateTime endTime = DateTime.parse(record.data['endTime']).toUtc();
+        print('Parsed End Time (UTC): $endTime');
+
+        // Get current time in UTC
+        DateTime now = DateTime.now().toUtc();
+        print('Current Time (UTC): $now');
+
+        Duration difference = endTime.difference(now);
+        print('Time Difference: $difference');
+
+        if (difference.isNegative) {
+          print('Timer expired. Resetting...');
+          resetTimer(); // Reset the timer if it has ended
+        } else {
+            if (mounted) {
+
+            
+          
+          setState(() {
+            days = difference.inDays;
+            hours = difference.inHours % 24;
+            minutes = difference.inMinutes % 60;
+          });
+          }
+          print('Updated countdown: $days days, $hours hours, $minutes minutes');
         }
       } else {
-        throw Exception('Unexpected countdown format');
+        print('No countdown timer found.');
       }
-    } else {
-      throw Exception('Failed to load countdown');
+    } catch (e) {
+      print('Error fetching countdown: $e');
+    }
+  }
+
+  // Set up periodic refresh for the countdown timer
+  void setupPeriodicRefresh() {
+  timer = Timer.periodic(Duration(minutes: 1), (Timer t) {
+    if (mounted) {
+      fetchCountdown(); // Only fetch and update if the widget is still mounted
+    }
+  });
+}
+
+  // Reset the timer in PocketBase (7 days from now)
+  Future<void> resetTimer() async {
+    try {
+      // Fetch the timer record
+      final response = await pb.collection('timers').getList(
+        filter: 'name = "countdown_timer"',
+        perPage: 1,
+      );
+
+      if (response.items.isNotEmpty) {
+        final record = response.items.first;
+        DateTime newEndTime = DateTime.now().toUtc().add(Duration(days: 7));
+
+        // Update the endTime
+        await pb.collection('timers').update(record.id, body: {
+          "endTime": newEndTime.toIso8601String(),
+        });
+
+        print('Timer reset successfully');
+        fetchCountdown(); // Refresh the timer
+      } else {
+        throw Exception('Countdown timer not found in PocketBase');
+      }
+    } catch (e) {
+      print('Error resetting timer: $e');
     }
   }
 
@@ -62,6 +116,9 @@ class _CountdownScreenState extends State<CountdownScreen> {
   Widget build(BuildContext context) {
     double height = MediaQuery.of(context).size.height;
     double width = MediaQuery.of(context).size.width;
+ fetchCountdown(); // Fetch countdown timer from PocketBase
+ setupPeriodicRefresh(); // Refresh every minute
+  
     return Padding(
       padding: EdgeInsets.only(left: width / 5, right: width / 5),
       child: Container(
@@ -82,23 +139,27 @@ class _CountdownScreenState extends State<CountdownScreen> {
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                            boxShadow: [BoxShadow(blurRadius: 5)],
-                            color: Color.fromARGB(255, 68, 35, 0)),
+                          boxShadow: [BoxShadow(blurRadius: 5)],
+                          color: Color.fromARGB(255, 68, 35, 0),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Text(
                             "0$days",
                             style: TextStyle(
-                                fontSize: width / 16, color: Colors.white),
+                              fontSize: width / 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                       Text(
-                        "Day",
+                        "Days",
                         style: TextStyle(
-                            color: Color.fromARGB(255, 68, 35, 0),
-                            fontSize: width / 30,
-                            fontWeight: FontWeight.bold),
+                          color: Color.fromARGB(255, 68, 35, 0),
+                          fontSize: width / 30,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )
                     ],
                   ),
@@ -107,36 +168,39 @@ class _CountdownScreenState extends State<CountdownScreen> {
                       Text(
                         ":",
                         style: TextStyle(
-                            fontSize: width / 10,
-                            color: Color.fromARGB(255, 68, 35, 0),
-                            fontWeight: FontWeight.bold),
+                          fontSize: width / 10,
+                          color: Color.fromARGB(255, 68, 35, 0),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      SizedBox(
-                        height: height / 38,
-                      )
+                      SizedBox(height: height / 38),
                     ],
                   ),
                   Column(
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                            boxShadow: [BoxShadow(blurRadius: 5)],
-                            color: Color.fromARGB(255, 68, 35, 0)),
+                          boxShadow: [BoxShadow(blurRadius: 5)],
+                          color: Color.fromARGB(255, 68, 35, 0),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Text(
                             "$hours",
                             style: TextStyle(
-                                fontSize: width / 16, color: Colors.white),
+                              fontSize: width / 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                       Text(
                         "Hours",
                         style: TextStyle(
-                            color: Color.fromARGB(255, 68, 35, 0),
-                            fontSize: width / 30,
-                            fontWeight: FontWeight.bold),
+                          color: Color.fromARGB(255, 68, 35, 0),
+                          fontSize: width / 30,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )
                     ],
                   ),
@@ -145,41 +209,44 @@ class _CountdownScreenState extends State<CountdownScreen> {
                       Text(
                         ":",
                         style: TextStyle(
-                            fontSize: width / 10,
-                            color: Color.fromARGB(255, 68, 35, 0),
-                            fontWeight: FontWeight.bold),
+                          fontSize: width / 10,
+                          color: Color.fromARGB(255, 68, 35, 0),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      SizedBox(
-                        height: height / 38,
-                      )
+                      SizedBox(height: height / 38),
                     ],
                   ),
                   Column(
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                            boxShadow: [BoxShadow(blurRadius: 5)],
-                            color: Color.fromARGB(255, 68, 35, 0)),
+                          boxShadow: [BoxShadow(blurRadius: 5)],
+                          color: Color.fromARGB(255, 68, 35, 0),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Text(
                             "$minutes",
                             style: TextStyle(
-                                fontSize: width / 16, color: Colors.white),
+                              fontSize: width / 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                       Text(
-                        "Min",
+                        "Minutes",
                         style: TextStyle(
-                            color: Color.fromARGB(255, 68, 35, 0),
-                            fontSize: width / 30,
-                            fontWeight: FontWeight.bold),
+                          color: Color.fromARGB(255, 68, 35, 0),
+                          fontSize: width / 30,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )
                     ],
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
