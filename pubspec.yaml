@@ -61,6 +61,7 @@ dependencies:
   flutter_screenutil: ^5.9.3
   flutter_image_carousel_slider: ^2.0.1
   country_icons: ^2.0.1
+  pocketbase: ^0.11.0
 
 
 

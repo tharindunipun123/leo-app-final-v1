@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:nobel_project/countdown.dart';
-import 'package:nobel_project/rankincontainer.dart';
+import 'package:leo_app_01/Account%20Section/nobel/countdown.dart';
+import 'package:leo_app_01/Account%20Section/nobel/rankincontainer.dart';
 import 'package:pocketbase/pocketbase.dart';
 final PocketBase pb = PocketBase('http://145.223.21.62:8090');
 

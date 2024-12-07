@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:rankingpage/rankingpage.dart';
 
 class question extends StatefulWidget {
   const question({super.key});

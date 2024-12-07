@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:leo_app_01/Account%20Section/level/progressbar.dart';
+import 'package:leo_app_01/Account%20Section/level/question.dart';
+import 'package:leo_app_01/Account%20Section/level/statemanegemnt/fillcount.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:provider/provider.dart';
-import 'package:rankingpage/progressbar.dart';
-import 'package:rankingpage/question.dart';
-import 'package:rankingpage/statemanegemnt/fillcount.dart';
 class RankingPagelevel extends StatefulWidget {
-  int ID;
+  String ID;
   RankingPagelevel({required this.ID, super.key});
 
   @override
