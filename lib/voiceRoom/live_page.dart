@@ -43,6 +43,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   String? _userAvatarUrl;
   String? _voiceRoomName;
   String? _backgroundImageUrl;
+  String? _language;
   static const String POCKETBASE_URL = 'http://145.223.21.62:8090'; // Replace with your actual PocketBase URL
 
   @override
@@ -65,6 +66,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       updateStartTime(widget.userId, widget.roomID);
       _fetchAndSetUserAvatar();
       _fetchVoiceRoomDetails();
+      _fetchLanguageDetails(widget.roomID);
       _createOnlineUserRecord();
     });
 
@@ -94,7 +96,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
 
 
+  Future<bool> _isUserJoined(String roomId, String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$POCKETBASE_URL/api/collections/joined_users/records?filter=(voice_room_id="$roomId" && userid="$userId")'),
+        headers: {'Content-Type': 'application/json'},
+      );
 
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return (data['items'] as List).isNotEmpty; // Return true if the user is found
+      }
+      return false; // Return false if the request fails
+    } catch (e) {
+      print('Error checking if user is joined: $e');
+      return false; // Return false in case of an error
+    }
+  }
 
   Future<void> updateStartTime(String userId, String voiceRoomId) async {
     final String baseUrl = 'http://145.223.21.62:8090/api/collections/level_Timer/records';
@@ -293,6 +311,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
+
+  Future<void> _fetchLanguageDetails(String roomId) async {
+    try {
+      final uri = Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/$roomId')
+          .replace(queryParameters: {
+        'fields': 'language', // Specify the fields you want to fetch
+      });
+
+      final response = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          // Assuming 'language' is the field you want to display
+          _language = data['language'];
+        });
+      } else {
+        print('Failed to fetch language details: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching language details: $e');
+    }
+  }
 
 
 
@@ -642,6 +686,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       final prefs = await SharedPreferences.getInstance();
       final currentUserId = prefs.getString('userId') ?? ''; // Default to an empty string if not found
 
+      bool isUserJoined = await _isUserJoined(roomId, currentUserId);
+
       if (currentUserId.isEmpty) {
         print('Error: User ID not found in SharedPreferences');
         return;
@@ -658,7 +704,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       final joinedUsersCount = await _fetchJoinedUsersCount(roomId);
 
       // Determine if the current user is joined or the room owner
-      bool isUserJoined = false;
+      //bool isUserJoined = false;
       bool isRoomOwner = false;
 
       // Check if the user has joined the room
@@ -788,6 +834,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                     _buildLevelRow(),
                                     _buildDetailRow('Members:', '$joinedUsersCount/500'),
                                     _buildRoomModeTags(roomData),
+                                    _buildLanguageRow(),
                                   ],
                                 ),
                               ),
@@ -803,18 +850,16 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                               currentUserId: currentUserId,
                             ),
                             // Join/Login Button
-                            Positioned(
-                              left: 16,
-                              right: 16,
-                              bottom: 16,
-                              child: _buildActionButton(
-                                isUserJoined || isRoomOwner ? "Already Joined" : "Join",
-                                isUserJoined || isRoomOwner ? Colors.grey[400]! : Colors.blue,
-                                isUserJoined || isRoomOwner
-                                    ? null
-                                    : () => _joinRoom(context, roomId, currentUserId),
-                              ),
-                            ),
+                       Positioned(
+                           left: 16,
+                           right: 16,
+                           bottom: 16,
+                           child: _buildActionButton(
+                           isUserJoined ? "Already Joined" : "Join",
+                          isUserJoined ? Colors.grey[400]! : Colors.blue,
+          isUserJoined ? null : () => _joinRoom(context, roomId, currentUserId),
+          ),
+          ),
                           ],
                         ),
                       ],
@@ -848,6 +893,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           Spacer(),
           Text(
             value,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildLanguageRow() {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Text(
+            'Language:',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+            ),
+          ),
+          Spacer(),
+          Text(
+            _language ?? 'Not specified', // Display the language or a default message
             style: TextStyle(
               fontWeight: FontWeight.w500,
               fontSize: 16,
@@ -1002,12 +1073,12 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(25),
-          onTap: onTap,
+          onTap: onTap, // This will be null if the button is disabled
           child: Center(
             child: Text(
               text,
               style: TextStyle(
-                color: onTap != null ? Colors.white : Colors.grey[600],
+                color: onTap != null ? Colors.white : Colors.grey[600], // Change text color based on button state
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
