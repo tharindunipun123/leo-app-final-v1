@@ -55,7 +55,11 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         localUserID: localUserID,
         localUserName: widget.username1,
       );
+
+      print("------------------------------------------");
+      print(localUserID);
       // Fetch avatar URL when component mounts
+      updateStartTime(widget.userId, widget.roomID);
       _fetchAndSetUserAvatar();
       _fetchVoiceRoomDetails();
       _createOnlineUserRecord();
@@ -84,6 +88,72 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ));
     });
   }
+
+
+
+
+
+  Future<void> updateStartTime(String userId, String voiceRoomId) async {
+    final String baseUrl = 'http://145.223.21.62:8090/api/collections/level_Timer/records';
+
+    try {
+      // Step 1: Fetch existing records for the user and voice room
+      final filter = Uri.encodeComponent('UserID="$userId" && voiceRoom_id="$voiceRoomId"');
+      final response = await http.get(Uri.parse('$baseUrl?filter=$filter'));
+
+      print('GET Response status: ${response.statusCode}');
+      print('GET Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> records = data['items'] ?? [];
+
+        // Step 2: Check existing record conditions
+        if (records.isNotEmpty) {
+          final record = records.first;
+
+          if (record['Start_Time'] != null && record['End_Time'] == null) {
+            // Delete the existing record
+            final deleteResponse = await http.delete(Uri.parse('$baseUrl/${record['id']}'));
+            print('DELETE Response status: ${deleteResponse.statusCode}');
+            print('DELETE Response body: ${deleteResponse.body}');
+
+            if (deleteResponse.statusCode != 204) {
+              throw Exception('Failed to delete record');
+            }
+          }
+        }
+
+        // Step 3: Insert a new record with the current start time
+        final newRecord = {
+          'UserID': userId,
+          'voiceRoom_id': voiceRoomId,
+          'Start_Time': DateTime.now().toIso8601String(),
+          'End_Time': null,
+        };
+
+        final postResponse = await http.post(
+          Uri.parse(baseUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(newRecord),
+        );
+
+        print('POST Response status: ${postResponse.statusCode}');
+        print('POST Response body: ${postResponse.body}');
+
+        if (postResponse.statusCode != 200 && postResponse.statusCode != 201) {
+          throw Exception('Failed to create new record');
+        }
+      } else {
+        print('Failed to fetch records: ${response.statusCode}');
+        throw Exception('Failed to fetch records');
+      }
+    } catch (e) {
+      print('Error occurred: $e');
+      rethrow;
+    }
+  }
+
 
 
 
@@ -161,6 +231,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
       // Then delete the online user record
       if (_onlineUserRecordId != null) {
+        updateEndTime(widget.userId, widget.roomID);
         try {
           await http.delete(
             Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
@@ -219,10 +290,64 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
+
+
+
+  Future<void> updateEndTime(String userId, String voiceRoomId) async {
+    final String baseUrl = 'http://145.223.21.62:8090/api/collections/level_Timer/records';
+
+    try {
+      // Step 1: Fetch existing records for the given userId and voiceRoomId
+      final filter = Uri.encodeComponent('UserID="$userId" && voiceRoom_id="$voiceRoomId"');
+      final response = await http.get(Uri.parse('$baseUrl?filter=$filter'));
+
+      print('GET Response status: ${response.statusCode}');
+      print('GET Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> records = data['items'] ?? [];
+
+        // Step 2: Find the record with an empty End_Time
+        final record = records.firstWhere(
+              (r) => r['End_Time'] == null || r['End_Time'] == "",
+          orElse: () => null,
+        );
+
+        if (record != null) {
+          // Update the End_Time for the correct record
+          final updatedRecord = {
+            'End_Time': DateTime.now().toIso8601String(),
+          };
+
+          final patchResponse = await http.patch(
+            Uri.parse('$baseUrl/${record['id']}'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(updatedRecord),
+          );
+
+          print('PATCH Response status: ${patchResponse.statusCode}');
+          print('PATCH Response body: ${patchResponse.body}');
+
+          if (patchResponse.statusCode != 200) {
+            throw Exception('Failed to update the record');
+          }
+        } else {
+          print('No active session found for the given userId and voiceRoomId');
+          throw Exception('No active session found');
+        }
+      } else {
+        throw Exception('Failed to fetch records: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error occurred: $e');
+      rethrow;
+    }
+  }
+
+
   @override
   void dispose() {
-
-
 
     ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
     ZegoGiftManager().service.uninit();
@@ -236,6 +361,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ).catchError((e) => print('Error cleaning up online user record: $e'));
 
     }
+
+    updateEndTime(widget.userId, widget.roomID);
 
     super.dispose();
 
@@ -254,6 +381,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       top: -6,
       left: 0,
       child: Container(
+
         width: size.width,
         height: size.height,
         decoration: const BoxDecoration(
