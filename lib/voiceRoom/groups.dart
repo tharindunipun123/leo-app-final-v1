@@ -7,6 +7,8 @@ import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 import 'package:country_icons/country_icons.dart';
 import 'package:country_picker/country_picker.dart';
+import 'package:country_code_picker/country_code_picker.dart';
+import 'package:country_flags/country_flags.dart';
 
 class VoiceRoom {
   final String id;
@@ -113,8 +115,10 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadUserData();
+    _fetchMineVoiceRooms();
     _fetchVoiceRooms();
     _fetchTagPhotos();
+
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -152,6 +156,20 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }).toList();
   }
 
+  String _getFlagUrl(String countryName) {
+    // Convert country name to lowercase for matching
+    final lowercaseCountry = countryName.toLowerCase();
+
+    // First try to find in _countries list
+    final countryData = _countries.firstWhere(
+          (country) => country['name']!.toLowerCase() == lowercaseCountry,
+      orElse: () => {'flag': 'https://flagcdn.com/w320/${lowercaseCountry.substring(0, 2)}.png'},
+    );
+
+    return countryData['flag'] ?? 'https://flagcdn.com/w320/xx.png'; // xx.png as fallback
+  }
+
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -181,6 +199,77 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       setState(() => _isLoading = false);
     }
   }
+
+  Future<void> _fetchMineVoiceRooms() async {
+    try {
+      setState(() => _isLoading = true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Fetch rooms created by the user
+      final createdResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")',
+        ),
+      );
+
+      // Fetch rooms joined by the user
+      final joinedResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(user_id="$userId")',
+        ),
+      );
+
+      if (createdResponse.statusCode == 200 && joinedResponse.statusCode == 200) {
+        final createdRoomsData = json.decode(createdResponse.body);
+        final joinedRoomsData = json.decode(joinedResponse.body);
+
+        final createdRooms = (createdRoomsData['items'] as List)
+            .map((item) => VoiceRoom.fromJson(item))
+            .toList();
+
+        final joinedRoomsIds = (joinedRoomsData['items'] as List)
+            .map((item) => item['voice_room_id'] as String)
+            .toSet();
+
+        final joinedRooms = await Future.wait(
+          joinedRoomsIds.map((roomId) async {
+            final roomResponse = await http.get(
+              Uri.parse(
+                'http://145.223.21.62:8090/api/collections/voiceRooms/records/$roomId',
+              ),
+            );
+
+            if (roomResponse.statusCode == 200) {
+              final roomData = json.decode(roomResponse.body);
+              return VoiceRoom.fromJson(roomData);
+            }
+            return null;
+          }),
+        );
+
+        setState(() {
+          _voiceRooms = [
+            ...createdRooms,
+            ...joinedRooms.where((room) => room != null).cast<VoiceRoom>(),
+          ];
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Error fetching mine voice rooms: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
 
   Future<bool> _checkExistingRoom() async {
     try {
@@ -456,7 +545,9 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
     final roomsToShow = isDiscoverTab
         ? filteredRoomsByCountry
-        : filteredRooms.where((room) => room.ownerId == _userId).toList();
+        : _voiceRooms.where((room) {
+      return room.ownerId == _userId; // Show only created rooms for now
+    }).toList();
 
     if (roomsToShow.isEmpty) {
       return Center(
@@ -473,6 +564,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
     );
   }
+
 
   String _getEmptyMessage(bool isDiscoverTab) {
     if (isDiscoverTab) {
@@ -659,7 +751,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _countries.take(5).map((country) => _buildCountryItem(country)).toList(),
+            children: _countries.take(5).map((country) => _buildSmallSquareFlag(country)).toList(),
           ),
         ),
         SizedBox(height: 12),
@@ -669,7 +761,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ..._countries.skip(5).take(4).map((country) => _buildCountryItem(country)).toList(),
+              ..._countries.skip(5).take(4).map((country) => _buildSmallSquareFlag(country)).toList(),
               // More button
               GestureDetector(
                 onTap: _showCountryPicker,
@@ -702,6 +794,26 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       ],
     );
   }
+
+  Widget _buildSmallSquareFlag(Map<String, String> country) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = country['name'];
+        });
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2), // Slight rounding for squares
+        child: Image.network(
+          country['flag']!,
+          width: 30, // Small square size
+          height: 30, // Small square size
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildCountryItem(Map<String, String> country) {
     final isSelected = _selectedCountry == country['name'];
@@ -858,260 +970,258 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
 
 
-
   Widget _buildRoomCard(VoiceRoom room) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: InkWell(
-        onTap: () => _navigateToLivePage(room),
-        child: Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.2),
-                spreadRadius: 1,
-                blurRadius: 8,
-                offset: Offset(0, 2),
-              ),
-            ],
+        onTap: () async {
+          final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
+          if (isRemoved) {
+            _showRemovalAlert();
+          } else {
+            _navigateToLivePage(room);
+          }
+        },
+        child: Card(
+          elevation: 2,
+          shadowColor: Colors.blue.withOpacity(0.1),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: IntrinsicHeight(
+          child: Container(
+            height: 110,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Image with Gold Frame
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Color(0xFFD4AF37),  // Gold color
-                          width: 3,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(9),
-                        child: CachedNetworkImage(
-                          imageUrl: 'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.blue[300],
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Icon(
-                            Icons.error,
-                            color: Colors.red[300],
+                // Room Image Section
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                  child: Container(
+                    width: 100,
+                    height: double.infinity,
+                    child: CachedNetworkImage(
+                      imageUrl:
+                      'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[100],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.blue[300],
                           ),
                         ),
                       ),
-                    ),
-                    // Bronze/Silver/Gold Badge
-                    Positioned(
-                      bottom: -15,
-                      right: -15,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Color(0xFFD4AF37),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              spreadRadius: 1,
-                              blurRadius: 3,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[100],
                         child: Icon(
-                          Icons.military_tech,
-                          color: Colors.white,
-                          size: 20,
+                          Icons.image_not_supported_outlined,
+                          color: Colors.grey[400],
+                          size: 30,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-                SizedBox(width: 16),
 
-                // Room Details
+                // Room Details Section
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Room Name and ID
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  room.voiceRoomName,
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  'ID: ${room.voiceRoomId}',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Signal Strength Indicator
-                          Container(
-                            padding: EdgeInsets.all(4),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.signal_cellular_alt,
-                                  size: 16,
-                                  color: Colors.purple,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  '8',
-                                  style: TextStyle(
-                                    color: Colors.purple,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-
-                      // Team Motto
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.blue[700]!, Colors.blue[400]!],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          room.teamMoto,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Room Name
+                        Text(
+                          room.voiceRoomName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      SizedBox(height: 8),
 
-                      // Badges Row
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                        const SizedBox(height: 2),
+
+                        // Room ID and Motto
+                        Row(
                           children: [
-                            // Country Flag Badge
+                            const SizedBox(width: 2),
+                            Text(
+                              'ID: ${room.voiceRoomId}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Team Motto
+                        Text(
+                          room.teamMoto,
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const Spacer(),
+
+                        // Flag, Language, and Tags Row
+                        Row(
+                          children: [
+                            // Country Flag
                             Container(
-                              margin: EdgeInsets.only(right: 8),
-                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              width: 24,
+                              height: 16,
                               decoration: BoxDecoration(
-                                color: Colors.grey[100],
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(2),
                                 border: Border.all(
                                   color: Colors.grey[300]!,
-                                  width: 1,
+                                  width: 0.5,
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Image.asset(
-                                    'icons/flags/png/${room.voiceRoomCountry.toLowerCase()}.png',
-                                    package: 'country_icons',
-                                    width: 20,
-                                    height: 15,
+                              clipBehavior: Clip.antiAlias,
+                              child: CachedNetworkImage(
+                                imageUrl: _getFlagUrl(room.voiceRoomCountry),
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[200],
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey[100],
+                                  child: Icon(
+                                    Icons.flag_outlined,
+                                    size: 12,
+                                    color: Colors.grey[400],
                                   ),
-                                ],
+                                ),
                               ),
                             ),
 
+                            const SizedBox(width: 13),
+
                             // Language Badge
                             Container(
-                              margin: EdgeInsets.only(right: 8),
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(12),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFFB8860B),
+                                    Color(0xFFDAA520),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 room.language,
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue[700],
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
 
-                            // Tags as Badges
-                            ...room.tags.split(',').map((tag) {
-                              final tagPhoto = _tagPhotos[tag.trim()];
-                              return Container(
-                                margin: EdgeInsets.only(right: 8),
-                                child: tagPhoto != null
-                                    ? CachedNetworkImage(
-                                  imageUrl: 'http://145.223.21.62:8090/api/files/tags/${tag.trim()}/$tagPhoto',
-                                  width: 30,
-                                  height: 30,
-                                  placeholder: (context, url) => Container(
-                                    width: 30,
-                                    height: 30,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[200],
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                  ),
-                                )
-                                    : Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    tag.trim(),
-                                    style: TextStyle(fontSize: 12),
-                                  ),
+                            const SizedBox(width: 13),
+
+                            // Tags
+                            Expanded(
+                              child: Container(
+                                height: 20,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: room.tags.split(',').map((tag) {
+                                    final trimmedTag = tag.trim();
+                                    return Container(
+                                      margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          trimmedTag,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.blue[700],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
-                              );
-                            }).toList(),
+                              ),
+                            ),
                           ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+// Helper Methods
+
+  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
+    final String userId = "CURRENT_USER_ID"; // Replace with the actual user ID (as a String).
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+            'http://145.223.21.62:8090/api/collections/removed_users/records/$voiceRoomId?fields=user_id,voice_room_id'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['user_id'] == userId && data['voice_room_id'] == voiceRoomId;
+      }
+    } catch (e) {
+      print('Error checking removal status: $e');
+    }
+    return false;
+  }
+
+
+  void _showRemovalAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Access Denied'),
+        content: Text(
+          'You cannot join this room because the room admins have removed you.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
       ),
     );
   }
