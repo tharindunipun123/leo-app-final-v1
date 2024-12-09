@@ -8,6 +8,9 @@ import 'package:flutter_image_carousel_slider/image_carousel_slider_left_right_s
 // Package imports:
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'memberlist.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Project imports:
 import 'constants.dart';
@@ -439,6 +442,26 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     return Stack(children: [userName]);
   }
 
+  // First, add a method to fetch joined users count
+  Future<int> _fetchJoinedUsersCount(String roomId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/joined_users/records?filter=(voice_room_id="$roomId")'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List items = data['items'];
+        // Add 1 to include the owner
+        return items.length + 1;
+      }
+      return 1; // Return 1 if only owner exists
+    } catch (e) {
+      print('Error fetching joined users: $e');
+      return 1;
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -528,25 +551,36 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Room Image
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white30, width: 1),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: _groupPhotoUrl != null
-                              ? Image.network(
-                            _groupPhotoUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Icon(Icons.image, size: 20, color: Colors.white54),
-                          )
-                              : Icon(Icons.image, size: 20, color: Colors.white54),
+                      GestureDetector(
+                        onTap: () => _showBottomSheet(context, widget.roomID),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white30, width: 1),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: _groupPhotoUrl != null
+                                ? Image.network(
+                              _groupPhotoUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Icon(
+                                Icons.image,
+                                size: 20,
+                                color: Colors.white54,
+                              ),
+                            )
+                                : Icon(
+                              Icons.image,
+                              size: 20,
+                              color: Colors.white54,
+                            ),
+                          ),
                         ),
                       ),
+
 
                       const SizedBox(width: 8),
 
@@ -561,26 +595,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      // Plus Icon
-                      GestureDetector(
-                        onTap: () => _showBottomSheet(context,widget.roomID),
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            color: Colors.white,
-                            size: 16,
-                          ),
                         ),
                       ),
                     ],
@@ -620,139 +634,569 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     );
   }
 
-  void _showBottomSheet(BuildContext context, String roomId) async {
-    // Fetch user data from the PocketBase API
-    List<Map<String, dynamic>> userData = await _fetchRoomUserDetails(roomId);
 
-    // Example network images for the carousel
-    List<String> imageList = [
-      "https://th.bing.com/th/id/OIP.XBvFTQ9AFT56EbqP60aKVwHaFj?rs=1&pid=ImgDetMain",
-      "https://ids13.com/wp-content/uploads/2021/04/gem-saviour-conquest.jpg",
-      "https://play-lh.googleusercontent.com/uMCSwJnIKCemiAIc7xNTGBkOxlSu_e6xzZb29cqqV6bKU8Qz0m4ZQ5pmGhBNxE-vBrA",
-    ];
 
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
+  Future<void> _showBottomSheet(BuildContext context, String roomId) async {
+    try {
+      // Fetch the current userId from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final currentUserId = prefs.getString('userId') ?? ''; // Default to an empty string if not found
+
+      if (currentUserId.isEmpty) {
+        print('Error: User ID not found in SharedPreferences');
+        return;
+      }
+
+      // Fetch room data
+      final roomResponse = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records/$roomId'),
+      );
+
+      if (roomResponse.statusCode != 200) return;
+
+      final roomData = json.decode(roomResponse.body);
+      final joinedUsersCount = await _fetchJoinedUsersCount(roomId);
+
+      // Determine if the current user is joined or the room owner
+      bool isUserJoined = false;
+      bool isRoomOwner = false;
+
+      // Check if the user has joined the room
+      final joinedCheckResponse = await http.get(
+        Uri.parse(
+            'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(voice_room_id="$roomId" && userid="$currentUserId")'),
+      );
+      if (joinedCheckResponse.statusCode == 200) {
+        final joinedData = json.decode(joinedCheckResponse.body);
+        isUserJoined = (joinedData['items'] as List).isNotEmpty;
+      }
+
+      // Check if the user is the room owner
+      isRoomOwner = roomData['ownerId'] == currentUserId;
+
+      // Show the bottom sheet
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  // Header with close and settings buttons
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Center(
+                          child: Text(
+                            "Room Information",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Spacer(),
+                        if (isRoomOwner)
+
+                        IconButton(
+                          icon: Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Tab Bar
+                  TabBar(
+                    tabs: [Tab(text: 'Profile'), Tab(text: 'Member')],
+                    labelColor: Colors.blue,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: Colors.blue,
+                  ),
+
+                  // Tab View Content
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        // Profile Tab
+                        SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 24),
+                              // Room Profile Image
+                              Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.grey[200]!, width: 2),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(60),
+                                  child: CachedNetworkImage(
+                                    imageUrl:
+                                    'http://145.223.21.62:8090/api/files/voiceRooms/${roomData['id']}/${roomData['group_photo']}',
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => CircularProgressIndicator(),
+                                    errorWidget: (context, url, error) => Icon(Icons.error),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Room Name
+                              Text(
+                                roomData['voice_room_name'] ?? 'Welcome Everyone',
+                                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              // Room ID with copy icon
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Room ID: ${roomData['voiceRoom_id']}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.copy, size: 16, color: Colors.grey[600]),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              // Room Details Container
+                              Container(
+                                margin: EdgeInsets.symmetric(horizontal: 24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  children: [
+                                    _buildDetailRow('Country:', roomData['voiceRoom_country'] ?? ''),
+                                    _buildLevelRow(),
+                                    _buildDetailRow('Members:', '$joinedUsersCount/500'),
+                                    _buildRoomModeTags(roomData),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Member Tab
+                        Stack(
+                          children: [
+                            MemberListScreen(
+                              voiceRoomId: roomId,
+                              currentUserId: currentUserId,
+                            ),
+                            // Join/Login Button
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 16,
+                              child: _buildActionButton(
+                                isUserJoined || isRoomOwner ? "Already Joined" : "Join",
+                                isUserJoined || isRoomOwner ? Colors.grey[400]! : Colors.blue,
+                                isUserJoined || isRoomOwner
+                                    ? null
+                                    : () => _joinRoom(context, roomId, currentUserId),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      print('Error in _showBottomSheet: $e');
+    }
+  }
+
+
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+            ),
+          ),
+          Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 16,
+            ),
+          ),
+        ],
       ),
-      backgroundColor: Colors.white,
-      isScrollControlled: true, // Allows for resizing
-      builder: (context) {
-        return FractionallySizedBox(
-          heightFactor: 0.75, // 75% of screen height
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildLevelRow() {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Text(
+            'Level:',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+            ),
+          ),
+          Spacer(),
+          Row(
             children: [
-              // Top Spacing and Title
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                child: Center(
-                  child: Text(
-                    "Room Joined Participants",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+              Text(
+                'LV.4',
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
                 ),
               ),
-              // const Divider(height: 0, thickness: 1), // No space between divider and carousel
-
-// Vertical Image Carousel with Green Gradient Background
+              const SizedBox(width: 8),
               Container(
-                height: 120, // Smaller height for the carousel
+                width: 100,
+                height: 4,
                 decoration: BoxDecoration(
-                  // gradient: const LinearGradient(
-                  //   colors: [Colors.greenAccent, Colors.lightGreen],
-                  //   begin: Alignment.topLeft,
-                  //   end: Alignment.bottomRight,
-                  // ),
-                  borderRadius: BorderRadius.circular(0), // Optional rounded corners
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                child: Center(
-                  child: ImageCarouselSliderLeftRightShow(
-                    items: imageList,
-                    imageHeight: 100, // Adjust to fit smaller height
-                    dotColor: Colors.white, // Dots for navigation
-                  ),
-                ),
-              ),
-
-              // const Divider(height: 0, thickness: 1), // No space between carousel and next section
-
-              // User List
-              Expanded(
-                child: ListView.builder(
-                  itemCount: userData.length,
-                  padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) {
-                    final user = userData[index];
-                    return ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          "http://145.223.21.62:8090/api/files/${user['collectionId']}/${user['id']}/${user['avatar']}",
-                          width: 40, // Smaller profile picture
-                          height: 40,
-                          fit: BoxFit.cover,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue[400]!, Colors.blue[300]!],
                         ),
-                      ),
-                      title: Text(
-                        user['firstname'] ?? "Unknown",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      subtitle: Text(
-                        user['bio'] ?? "No bio available",
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    );
-                  },
-                ),
-              ),
-              // Gradient "Join" Button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: GestureDetector(
-                  onTap: () {
-                    // Handle Join Button Click
-                    Navigator.of(context).pop();
-                  },
-                  child: Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.blue, Colors.lightBlueAccent],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        "Join",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'LV.5',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
                 ),
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
+
+  Widget _buildRoomModeTags(Map<String, dynamic> roomData) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Room mode:',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+            ),
+          ),
+           Spacer(),
+
+
+          Flexible(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 18, // Space between tags
+              runSpacing: 18, // Space between rows if tags wrap
+              children: (roomData['tags'] ?? '')
+                  .toString()
+                  .split(',')
+                  .map<Widget>((tag) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Text(
+                    tag.trim(),
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+  Widget _buildActionButton(String text, Color color, Function()? onTap) {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        gradient: onTap != null
+            ? LinearGradient(
+          colors: [
+            color,
+            color.withOpacity(0.8),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        )
+            : null,
+        color: onTap == null ? color : null,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: onTap != null
+            ? [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(25),
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: onTap != null ? Colors.white : Colors.grey[600],
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _joinRoom(BuildContext context, String roomId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://145.223.21.62:8090/api/collections/joined_users/records'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'voice_room_id': roomId,
+          'userid': userId,
+          'admin_or_not': false,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully joined the room')),
+        );
+      }
+    } catch (e) {
+      print('Error joining room: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join room')),
+      );
+    }
+  }
+
+
+// Helper method to build member list item
+  Widget _buildMemberListItem(Map<String, dynamic> user) {
+    return Container(
+      height: 70,
+      margin: EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(25),
+          child: CachedNetworkImage(
+            imageUrl: "http://145.223.21.62:8090/api/files/${user['collectionId']}/${user['id']}/${user['avatar']}",
+            width: 50,
+            height: 50,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: Colors.grey[200],
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.blue[300],
+                ),
+              ),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey[300],
+              child: Icon(Icons.person, color: Colors.grey[400]),
+            ),
+          ),
+        ),
+        title: Text(
+          user['firstname'] ?? "Unknown",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          user['bio'] ?? "No bio available",
+          style: TextStyle(fontSize: 12),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Icon(Icons.arrow_forward_ios, size: 16),
+      ),
+    );
+  }
+
+
+
+// Header Section
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          const Text(
+            "Room Information",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+// Updated helper method for room tags
+  Widget _buildRoomTags(String tags) {
+    return ListView(
+      scrollDirection: Axis.horizontal,
+      children: tags.split(',').map((tag) {
+        final trimmedTag = tag.trim();
+        if (trimmedTag.isEmpty) return const SizedBox();
+        return Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Center(
+            child: Text(
+              trimmedTag,
+              style: TextStyle(
+                color: Colors.blue[700],
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+
+// Helper Widgets
+
+
+  Widget _buildLevelProgress() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'LV.4',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 16,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          width: 100,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Stack(
+            children: [
+              Container(
+                width: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue[400]!, Colors.blue[300]!],
+                  ),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'LV.5',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 16,
+            color: Colors.grey[400],
+          ),
+        ),
+      ],
+    );
+  }
+
+
+
 
   Future<List<Map<String, dynamic>>> _fetchRoomUserDetails(String roomId) async {
     final String url =

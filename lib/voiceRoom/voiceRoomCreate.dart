@@ -14,6 +14,20 @@ class CreateVoiceRoomPage extends StatefulWidget {
 }
 
 class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
+  // Constants for styling
+  static const primaryColor = Colors.blue; // Main blue color
+  static const accentColor = Color(0xFF2196F3); // Light blue accent
+  static const backgroundColor = Color(0xFFE3F2FD); // Very light blue background
+  static const textColor = Color(0xFF1976D2); // Darker blue for text
+  static const cardColor = Color(0xFFFFFFFF); // White for cards
+
+  List<String> _languages = [
+    'English', 'Sinhala', 'Tamil'
+  ];
+  String? _selectedLanguage;
+  List<String> _tags = [];
+  String? _selectedTag;
+
   Country? selectedCountry;
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
@@ -21,7 +35,6 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
   final TextEditingController _roomIdController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
   final TextEditingController _mottoController = TextEditingController();
-  final TextEditingController _tagsController = TextEditingController();
 
   String? ownerId;
   File? groupPhoto;
@@ -33,32 +46,38 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     super.initState();
     _loadOwnerId();
     _generateRoomId();
+    _fetchTags();
+  }
+
+  Future<void> _fetchTags() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/tags/records'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List;
+        setState(() {
+          _tags = items.map((item) => item['tag_name'].toString()).toList();
+          setState(() {
+            _tags = items.map((item) => item['tag_name'].toString()).toList();
+          });
+        });
+      }
+    } catch (e) {
+      print('Error fetching tags: $e');
+      print('Error fetching tags: $e');
+    }
   }
 
   void _generateRoomId() {
     final random = Random();
     String roomId = '';
-    Set<String> existingIds = {}; // Store existing IDs to avoid duplicates
-
-    // Generate a 10-digit number
-    do {
-      roomId = '';
-      for (int i = 0; i < 10; i++) {
-        roomId += random.nextInt(10).toString();
-      }
-    } while (existingIds.contains(roomId));
-
+    for (int i = 0; i < 10; i++) {
+      roomId += random.nextInt(10).toString();
+    }
     _roomIdController.text = roomId;
-  }
-
-  @override
-  void dispose() {
-    _roomNameController.dispose();
-    _roomIdController.dispose();
-    _countryController.dispose();
-    _mottoController.dispose();
-    _tagsController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadOwnerId() async {
@@ -66,6 +85,437 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     setState(() {
       ownerId = prefs.getString('userId') ?? '';
     });
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required IconData icon,
+    required String? value,
+    required List<String> items,
+    required Function(String?) onChanged,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[50]!, Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(
+            color: Colors.blue[700],
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+          prefixIcon: Icon(icon, color: Colors.blue[700]),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[100]!,
+              width: 1,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[100]!,
+              width: 1,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[400]!,
+              width: 2,
+            ),
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
+        items: items.map((String item) {
+          return DropdownMenuItem<String>(
+            value: item,
+            child: Text(
+              item,
+              style: TextStyle(
+                color: Colors.blue[900],
+                fontSize: 16,
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: validator,
+        dropdownColor: Colors.white,
+        icon: Icon(Icons.arrow_drop_down, color: Colors.blue[700]),
+        style: TextStyle(
+          color: Colors.blue[900],
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    int? maxLength,
+    String? helperText,
+    bool? readOnly,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[50]!, Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        readOnly: readOnly ?? false,
+        onTap: onTap,
+        style: TextStyle(
+          color: Colors.blue[900],
+          fontSize: 16,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(
+            color: Colors.blue[700],
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+          helperText: helperText,
+          helperStyle: TextStyle(
+            color: Colors.blue[400],
+          ),
+          prefixIcon: Icon(
+            icon,
+            color: Colors.blue[700],
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[100]!,
+              width: 1,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[100]!,
+              width: 1,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: Colors.blue[400]!,
+              width: 2,
+            ),
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
+        validator: validator,
+        keyboardType: keyboardType,
+        maxLength: maxLength,
+      ),
+    );
+  }
+
+  Widget _buildImageSection(bool isGroupPhoto) {
+    final File? imageFile = isGroupPhoto ? groupPhoto : backgroundImage;
+
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.blue[50]!,
+            Colors.white,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header with icon
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isGroupPhoto ? Icons.group : Icons.wallpaper,
+                  color: Colors.blue[700],
+                  size: 24,
+                ),
+                SizedBox(width: 12),
+                Text(
+                  isGroupPhoto ? 'Group Photo' : 'Background Image',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[900],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Image preview or placeholder
+          Container(
+            height: 200,
+            margin: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: Colors.blue[100]!,
+                width: 1,
+              ),
+            ),
+            child: imageFile != null
+                ? ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: Image.file(
+                imageFile,
+                fit: BoxFit.cover,
+              ),
+            )
+                : Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isGroupPhoto ? Icons.add_photo_alternate : Icons.add_photo_alternate_outlined,
+                    size: 48,
+                    color: Colors.blue[300],
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Tap to upload ${isGroupPhoto ? 'group photo' : 'background'}',
+                    style: TextStyle(
+                      color: Colors.blue[400],
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Upload button
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: ElevatedButton.icon(
+              onPressed: () => _pickImage(isGroupPhoto),
+              icon: Icon(
+                imageFile == null ? Icons.cloud_upload : Icons.edit,
+                size: 20,
+              ),
+              label: Text(
+                imageFile == null ? 'Upload Image' : 'Change Image',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      appBar: AppBar(
+        title: Text(
+          'Create Voice Room',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+        backgroundColor: primaryColor,
+        elevation: 0,
+      ),
+      body: ownerId == null
+          ? Center(child: CircularProgressIndicator(color: accentColor))
+          : SingleChildScrollView(
+        padding: EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildFormField(
+                controller: _roomNameController,
+                label: 'Voice Room Name',
+                icon: Icons.meeting_room,
+              ),
+              _buildFormField(
+                controller: _roomIdController,
+                label: 'Voice Room ID',
+                icon: Icons.numbers,
+                keyboardType: TextInputType.number,
+                maxLength: 10,
+                readOnly: true,
+                helperText: 'Auto-generated 10-digit number',
+              ),
+              _buildFormField(
+                controller: _countryController,
+                label: 'Country',
+                icon: Icons.flag,
+                readOnly: true,
+                onTap: () => _showCountryPicker(),
+              ),
+              _buildDropdownField(
+                label: 'Language',
+                icon: Icons.language,
+                value: _selectedLanguage,
+                items: _languages,
+                onChanged: (value) => setState(() => _selectedLanguage = value),
+                validator: (value) => value == null ? 'Please select a language' : null,
+              ),
+              _buildDropdownField(
+                label: 'Tag',
+                icon: Icons.tag,
+                value: _selectedTag,
+                items: _tags,
+                onChanged: (value) => setState(() => _selectedTag = value),
+                validator: (value) => value == null ? 'Please select a tag' : null,
+              ),
+              _buildFormField(
+                controller: _mottoController,
+                label: 'Team Motto',
+                icon: Icons.format_quote,
+              ),
+              SizedBox(height: 16),
+              _buildImageSection(true),
+              _buildImageSection(false),
+              SizedBox(height: 24),
+              // Replace the existing ElevatedButton in _submitForm with this new implementation:
+
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF1976D2),  // Dark blue from your existing colors
+                      Color(0xFF2196F3),  // Light blue accent from your colors
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.3),
+                      spreadRadius: 1,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _submitForm,
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: isLoading
+                      ? SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : Text(
+                    'Create Voice Room',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickImage(bool isGroupPhoto) async {
@@ -88,6 +538,29 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     }
   }
 
+  void _showCountryPicker() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: false,
+      countryListTheme: CountryListThemeData(
+        borderRadius: BorderRadius.circular(12),
+        inputDecoration: InputDecoration(
+          labelText: 'Search country',
+          prefixIcon: Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      onSelect: (Country country) {
+        setState(() {
+          selectedCountry = country;
+          _countryController.text = country.name;
+        });
+      },
+    );
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -98,16 +571,57 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     );
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+// Add this function to fetch the Admin badge
+  Future<String?> _getAdminBadge() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/badges/records'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final badges = data['items'] as List;
+
+        // Find the Admin badge
+        final adminBadge = badges.firstWhere(
+              (badge) => badge['badgeName'] == 'admin',
+          orElse: () => null,
+        );
+
+        if (adminBadge != null) {
+          return adminBadge['id'];
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching admin badge: $e');
+      return null;
+    }
   }
 
+// Add this function to create a received badge record
+  Future<void> _createReceivedBadge(String userId, String badgeName) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': userId,
+          'batch_name': badgeName,
+        }),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Failed to create received badge');
+      }
+    } catch (e) {
+      print('Error creating received badge: $e');
+      throw e;
+    }
+  }
+
+// Update your _submitForm function to include badge handling
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -120,6 +634,13 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
     _formKey.currentState!.save();
 
     try {
+      // First, get the Admin badge ID
+      final adminBadgeId = await _getAdminBadge();
+      if (adminBadgeId == null) {
+        throw Exception('Admin badge not found');
+      }
+
+      // Create voice room
       final uri = Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records');
       final request = http.MultipartRequest('POST', uri);
 
@@ -128,8 +649,9 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         'voiceRoom_id': _roomIdController.text,
         'voiceRoom_country': _countryController.text,
         'team_moto': _mottoController.text,
-        'tags': _tagsController.text,
+        'tag': _selectedTag ?? '',
         'ownerId': ownerId ?? '',
+        'language': _selectedLanguage ?? '',
       });
 
       if (groupPhoto != null) {
@@ -151,6 +673,9 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       final data = jsonDecode(responseBody);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        // Create received badge record for the user
+        await _createReceivedBadge(ownerId!, 'Admin');
+
         _showSuccessSnackBar('Voice room created successfully!');
 
         final prefs = await SharedPreferences.getInstance();
@@ -174,253 +699,18 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         throw Exception('Failed to create voice room: ${data['message']}');
       }
     } catch (e) {
-      _showErrorSnackBar('Error creating voice room: $e');
+      _showErrorSnackBar('Error: $e');
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  Widget _buildFormField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    String? Function(String?)? validator,
-    TextInputType? keyboardType,
-    int? maxLength,
-    String? helperText,
-    bool? readOnly,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextFormField(
-        controller: controller,
-        readOnly: readOnly ?? false,
-        decoration: InputDecoration(
-          labelText: label,
-          helperText: helperText,
-          prefixIcon: Icon(icon, color: Colors.blue),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue.shade200),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.blue.shade50,
-        ),
-        validator: validator ?? (value) => value?.isEmpty ?? true ? 'This field is required' : null,
-        keyboardType: keyboardType,
-        maxLength: maxLength,
-      ),
-    );
-  }
-
-  void _showCountryPicker() {
-    showCountryPicker(
-      context: context,
-      showPhoneCode: false,
-      countryListTheme: CountryListThemeData(
-        borderRadius: BorderRadius.circular(12),
-        inputDecoration: InputDecoration(
-          labelText: 'Search country',
-          prefixIcon: const Icon(Icons.search),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      onSelect: (Country country) {
-        setState(() {
-          selectedCountry = country;
-          _countryController.text = country.name;
-        });
-      },
-    );
-  }
-
-  Widget _buildCountryField() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextFormField(
-        controller: _countryController,
-        readOnly: true,
-        decoration: InputDecoration(
-          labelText: 'Country',
-          prefixIcon: Icon(Icons.flag, color: Colors.blue),
-          suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.blue),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue.shade200),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.blue.shade50,
-        ),
-        validator: (value) => value?.isEmpty ?? true ? 'Please select a country' : null,
-        onTap: _showCountryPicker,
-      ),
-    );
-  }
-
-  Widget _buildImageSection(bool isGroupPhoto) {
-    final File? imageFile = isGroupPhoto ? groupPhoto : backgroundImage;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              isGroupPhoto ? 'Group Photo' : 'Background Image',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (imageFile != null)
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  image: DecorationImage(
-                    image: FileImage(imageFile),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => _pickImage(isGroupPhoto),
-              icon: Icon(isGroupPhoto ? Icons.group_add : Icons.wallpaper),
-              label: Text(imageFile == null ? 'Select Image' : 'Change Image'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Create Voice Room',
-          style: TextStyle(fontWeight: FontWeight.bold , color: Colors.white),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.blue,
-        elevation: 0,
-      ),
-      body: ownerId == null
-          ? const Center(child: CircularProgressIndicator(color: Colors.blue))
-          : Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade100, Colors.white],
-          ),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        _buildFormField(
-                          controller: _roomNameController,
-                          label: 'Voice Room Name',
-                          icon: Icons.meeting_room,
-                        ),
-                        _buildFormField(
-                          controller: _roomIdController,
-                          label: 'Voice Room ID',
-                          icon: Icons.numbers,
-                          keyboardType: TextInputType.number,
-                          maxLength: 10,
-                          readOnly: true,
-                          helperText: 'Auto-generated 10-digit number',
-                        ),
-                        _buildCountryField(),
-                        _buildFormField(
-                          controller: _mottoController,
-                          label: 'Team Motto',
-                          icon: Icons.format_quote,
-                        ),
-                        _buildFormField(
-                          controller: _tagsController,
-                          label: 'Tags',
-                          icon: Icons.tag,
-                          helperText: 'Separate tags with commas',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildImageSection(true),
-                const SizedBox(height: 16),
-                _buildImageSection(false),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: isLoading ? null : _submitForm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 4,
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                      : const Text(
-                    'Create Voice Room',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        ),
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: accentColor,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

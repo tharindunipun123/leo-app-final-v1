@@ -6,6 +6,9 @@ import 'package:leo_app_01/Account%20Section/profile.dart';
 import 'package:leo_app_01/Account%20Section/profileUpdate.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'level/rankingpage.dart';
+import 'nobel/profilepage.dart';
+import 'nobel/rankingpage.dart';
 import 'wallet.dart';
 import 'Myitems.dart';
 import 'package:leo_app_01/Account%20Section/nobel/profilepage.dart';
@@ -338,14 +341,19 @@ class _AccountScreenState extends State<AccountScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreScreen()));
   }
 
-  void _navigateToLevel(BuildContext context) {
+  void _navigateToLevel(BuildContext context) async{
     // Navigate to Level screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlaceholderScreen('Level')));
+     final prefs = await SharedPreferences.getInstance();
+final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
+   Navigator.of(context).push(MaterialPageRoute(builder: (_) => RankingPagelevel(ID: userId)));
+ }
   }
 
-  void _navigateToNobel(BuildContext context) {
+  void _navigateToNobel(BuildContext context)async {
     // Navigate to Nobel screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => profilepage(ID: 2,)));
+  final prefs = await SharedPreferences.getInstance();
+ final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => profilepage(userId: userId, ID: userId,),));
   }
 
   void _navigateToSVIP(BuildContext context) {
@@ -393,7 +401,7 @@ class _AccountScreenState extends State<AccountScreen> {
   //     },
   //   );
   // }
-}
+
 
 // Placeholder screen for navigation
 class PlaceholderScreen extends StatelessWidget {

@@ -6,6 +6,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 import 'package:country_icons/country_icons.dart';
+import 'package:country_picker/country_picker.dart';
+import 'package:country_code_picker/country_code_picker.dart';
+import 'package:country_flags/country_flags.dart';
 
 class VoiceRoom {
   final String id;
@@ -17,6 +20,7 @@ class VoiceRoom {
   final String groupPhoto;
   final String tags;
   final String backgroundImages;
+  final String language;  // Added language field
 
   VoiceRoom({
     required this.id,
@@ -28,6 +32,7 @@ class VoiceRoom {
     required this.groupPhoto,
     required this.tags,
     required this.backgroundImages,
+    required this.language,  // Added to constructor
   });
 
   factory VoiceRoom.fromJson(Map<String, dynamic> json) {
@@ -41,6 +46,7 @@ class VoiceRoom {
       groupPhoto: json['group_photo'],
       tags: json['tags'],
       backgroundImages: json['background_images'],
+      language: json['language'] ?? '',  // Added with null safety
     );
   }
 }
@@ -51,6 +57,14 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
+
+  String? _selectedCountry;
+  bool _showCountryDialog = false;
+  TextEditingController _countrySearchController = TextEditingController();
+
+  bool _isSearchingById = false;
+  TextEditingController _roomIdController = TextEditingController();
+
   late TabController _tabController;
   final List<String> _tabs = ["Discover", "Mine"];
   List<VoiceRoom> _voiceRooms = [];
@@ -72,13 +86,39 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     {'name': 'Bangladesh', 'flag': 'https://flagcdn.com/w320/bd.png'},
   ];
 
+  Map<String, String> _tagPhotos = {};
+
+  Future<void> _fetchTagPhotos() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/tags/records'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final tags = data['items'] as List;
+        setState(() {
+          for (var tag in tags) {
+            _tagPhotos[tag['tag_name']] = tag['tag_photo'];
+          }
+        });
+      }
+    } catch (e) {
+      print('Error fetching tag photos: $e');
+    }
+  }
+
+
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadUserData();
+    _fetchMineVoiceRooms();
     _fetchVoiceRooms();
+    _fetchTagPhotos();
+
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -88,11 +128,47 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     });
   }
 
+  List<VoiceRoom> get filteredRoomsByCountry {
+    var rooms = filteredRooms;
+
+    // Filter by country if selected
+    if (_selectedCountry != null) {
+      rooms = rooms.where((room) {
+        return room.voiceRoomCountry.toLowerCase() == _selectedCountry!.toLowerCase();
+      }).toList();
+    }
+
+    // Filter by room ID if searching
+    if (_isSearchingById && _roomIdController.text.isNotEmpty) {
+      rooms = rooms.where((room) {
+        return room.voiceRoomId.toString().contains(_roomIdController.text);
+      }).toList();
+    }
+
+    return rooms;
+  }
+
   List<VoiceRoom> get filteredRooms {
     return _voiceRooms.where((room) {
-      return room.voiceRoomName.toLowerCase().contains(_searchQuery);
+      final query = _searchQuery.toLowerCase();
+      return room.voiceRoomName.toLowerCase().contains(query) ||
+          room.voiceRoomId.toString().toLowerCase().contains(query);
     }).toList();
   }
+
+  String _getFlagUrl(String countryName) {
+    // Convert country name to lowercase for matching
+    final lowercaseCountry = countryName.toLowerCase();
+
+    // First try to find in _countries list
+    final countryData = _countries.firstWhere(
+          (country) => country['name']!.toLowerCase() == lowercaseCountry,
+      orElse: () => {'flag': 'https://flagcdn.com/w320/${lowercaseCountry.substring(0, 2)}.png'},
+    );
+
+    return countryData['flag'] ?? 'https://flagcdn.com/w320/xx.png'; // xx.png as fallback
+  }
+
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -124,13 +200,118 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }
   }
 
-  void _navigateToCreateRoom() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CreateVoiceRoomPage(),
-      ),
-    );
+  Future<void> _fetchMineVoiceRooms() async {
+    try {
+      setState(() => _isLoading = true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Fetch rooms created by the user
+      final createdResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")',
+        ),
+      );
+
+      // Fetch rooms joined by the user
+      final joinedResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(user_id="$userId")',
+        ),
+      );
+
+      if (createdResponse.statusCode == 200 && joinedResponse.statusCode == 200) {
+        final createdRoomsData = json.decode(createdResponse.body);
+        final joinedRoomsData = json.decode(joinedResponse.body);
+
+        final createdRooms = (createdRoomsData['items'] as List)
+            .map((item) => VoiceRoom.fromJson(item))
+            .toList();
+
+        final joinedRoomsIds = (joinedRoomsData['items'] as List)
+            .map((item) => item['voice_room_id'] as String)
+            .toSet();
+
+        final joinedRooms = await Future.wait(
+          joinedRoomsIds.map((roomId) async {
+            final roomResponse = await http.get(
+              Uri.parse(
+                'http://145.223.21.62:8090/api/collections/voiceRooms/records/$roomId',
+              ),
+            );
+
+            if (roomResponse.statusCode == 200) {
+              final roomData = json.decode(roomResponse.body);
+              return VoiceRoom.fromJson(roomData);
+            }
+            return null;
+          }),
+        );
+
+        setState(() {
+          _voiceRooms = [
+            ...createdRooms,
+            ...joinedRooms.where((room) => room != null).cast<VoiceRoom>(),
+          ];
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Error fetching mine voice rooms: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+
+  Future<bool> _checkExistingRoom() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        return false;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final rooms = data['items'] as List;
+        return rooms.isNotEmpty;
+      }
+      return false;
+    } catch (e) {
+      print('Error checking existing room: $e');
+      return false;
+    }
+  }
+
+  void _navigateToCreateRoom() async {
+    final hasExistingRoom = await _checkExistingRoom();
+
+    if (!mounted) return;
+
+    if (hasExistingRoom) {
+      _showErrorDialog(context);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CreateVoiceRoomPage(),
+        ),
+      );
+    }
   }
 
   @override
@@ -140,31 +321,43 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         child: Column(
           children: [
             _buildSearchBar(),
-            _buildAdvertBanner(),
-            _buildCountriesSection(),
-            TabBar(
-              controller: _tabController,
-              tabs: _tabs.map((String name) => Tab(text: name)).toList(),
-              labelColor: Colors.blue[700],
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.blue[700],
-            ),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildVoiceRoomsList(true),
-                  _buildVoiceRoomsList(false),
-                ],
+              child: NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) {
+                  return [
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          _buildStatsSquares(),
+                          _buildCountriesSection(),
+                        ],
+                      ),
+                    ),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _SliverAppBarDelegate(
+                        TabBar(
+                          controller: _tabController,
+                          tabs: _tabs.map((String name) => Tab(text: name)).toList(),
+                          labelColor: Colors.blue[700],
+                          unselectedLabelColor: Colors.grey,
+                          indicatorColor: Colors.blue[700],
+                        ),
+                      ),
+                    ),
+                  ];
+                },
+                body: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildVoiceRoomsList(true),
+                    _buildVoiceRoomsList(false),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToCreateRoom,
-        backgroundColor: Colors.blue,
-        child: Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -173,23 +366,45 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     return Container(
       padding: EdgeInsets.all(16),
       color: Colors.lightBlue[50],
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search voice rooms...',
-          prefixIcon: Icon(Icons.search, color: Colors.blue),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
-            borderSide: BorderSide.none,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.7,
+              child: TextField(
+                controller: _searchController,
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search by room name or ID...',
+                  prefixIcon: Icon(Icons.search, color: Colors.blue),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+              ),
+            ),
           ),
-          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        ),
+          SizedBox(width: 12),
+          GestureDetector(
+            onTap: _navigateToCreateRoom,
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Icon(Icons.add, color: Colors.white, size: 24),
+            ),
+          ),
+        ],
       ),
     );
   }
-
   Widget _buildAdvertBanner() {
     return Container(
       height: 100,
@@ -204,103 +419,140 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildCountriesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            'Recommend Country',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  void _showErrorDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        ),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(), // Prevent scrolling within the grid
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5, // 5 columns
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 1, // Square items
-          ),
-          itemCount: _countries.length + 1, // Add one for the "All" button
-          itemBuilder: (context, index) {
-            if (index < _countries.length) {
-              final country = _countries[index];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(50), // Circular flag
-                    child: Image.network(
-                      country['flag']!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Icon(Icons.error, color: Colors.red),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    country['name']!,
-                    style: const TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
-                    textAlign: TextAlign.center,
-                  ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.blue[50]!,
+                  Colors.white,
                 ],
-              );
-            } else {
-              // "All" button
-              return GestureDetector(
-                onTap: () {
-                  // Handle "View More Countries" action
-                  print('View More Countries tapped');
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: const Icon(Icons.more_horiz, color: Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'All',
-                      style: TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.2),
+                  spreadRadius: 4,
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
                 ),
-              );
-            }
-          },
-        ),
-      ],
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Error Icon
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.warning_rounded,
+                    color: Colors.red[400],
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+
+                // Title
+                Text(
+                  'Room Already Exists',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[900],
+                  ),
+                ),
+                SizedBox(height: 12),
+
+                // Message
+                Text(
+                  'You can only create one voice room at a time. Please delete your existing room before creating a new one.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.blue[700],
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: 24),
+
+                // Button
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue[700]!, Colors.blue[500]!],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        spreadRadius: 1,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: Text(
+                      'Got it',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-
-  Widget _buildVoiceRoomsList(bool isMineTab) {
+  Widget _buildVoiceRoomsList(bool isDiscoverTab) {
     if (_isLoading) {
       return Center(child: CircularProgressIndicator(color: Colors.blue));
     }
 
-    final roomsToShow = isMineTab
-        ? filteredRooms.where((room) => room.ownerId == _userId).toList()
-        : filteredRooms;
+    final roomsToShow = isDiscoverTab
+        ? filteredRoomsByCountry
+        : _voiceRooms.where((room) {
+      return room.ownerId == _userId; // Show only created rooms for now
+    }).toList();
 
     if (roomsToShow.isEmpty) {
       return Center(
         child: Text(
-          _searchQuery.isEmpty
-              ? 'No voice rooms found'
-              : 'No matching voice rooms found',
+          _getEmptyMessage(isDiscoverTab),
           style: TextStyle(fontSize: 16, color: Colors.grey[600]),
         ),
       );
@@ -313,122 +565,699 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildRoomCard(VoiceRoom room) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _navigateToLivePage(room),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Group Photo on the left
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: CachedNetworkImage(
-                  imageUrl:
-                  'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
-                  width: 70,
-                  height: 70,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    width: 70,
-                    height: 70,
-                    color: Colors.grey[200],
-                    child: const Center(
-                        child: CircularProgressIndicator(color: Colors.blue)),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 70,
-                    height: 70,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.error, color: Colors.blue),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12), // Space between image and text
-              // Details and Country Flag
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Voice Room Name
-                    Text(
-                      room.voiceRoomName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // ID
-                    Text(
-                      'ID: ${room.voiceRoomId}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Team Moto in Gradient Container
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.blueAccent, Colors.lightBlue],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(12),
-                          right: Radius.circular(12),
-                        ), // Rounded sides
-                      ),
-                      child: Text(
-                        room.teamMoto,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+
+  String _getEmptyMessage(bool isDiscoverTab) {
+    if (isDiscoverTab) {
+      if (_isSearchingById) {
+        return 'No rooms found with this ID';
+      } else if (_selectedCountry != null) {
+        return 'No rooms found in ${_selectedCountry}';
+      }
+      return 'No voice rooms found';
+    }
+    return 'You haven\'t created any rooms yet';
+  }
+
+  Widget _buildStatsSquares() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Family Square - Turquoise to Mint gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF40E0D0),  // Turquoise
+                    Color(0xFF48F3D1),  // Mint
                   ],
+                  stops: [0.2, 0.9],
                 ),
-              ),
-              // Country with Flag on the Right
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Country Flag using country_icons
-                  Image.asset(
-                    'icons/flags/png/${room.voiceRoomCountry.toLowerCase()}.png',
-                    package: 'country_icons',
-                    width: 30,
-                    height: 20,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.flag, size: 20, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    room.voiceRoomCountry,
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFF40E0D0).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.family_restroom, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Family',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Rank Square - Golden Sunset gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFFFB347),  // Light Orange
+                    Color(0xFFFFE5B4),  // Peach
+                  ],
+                  stops: [0.2, 0.9],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFFFFB347).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.workspace_premium, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Rank',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Couple Square - Soft Rose gradient
+          Expanded(
+            child: Container(
+              height: 100,
+              margin: EdgeInsets.only(left: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFFFF6B95),  // Rose Pink
+                    Color(0xFFFFB6C1),  // Light Pink
+                  ],
+                  stops: [0.2, 0.9],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFFFF6B95).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.favorite, color: Colors.white, size: 32),
+                  SizedBox(height: 8),
+                  Text(
+                    'Couple',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountriesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Popular Countries',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              if (_selectedCountry != null)
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCountry = null;
+                    });
+                  },
+                  child: Text(
+                    'Clear Filter',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
             ],
+          ),
+        ),
+        // First Row of Countries
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _countries.take(5).map((country) => _buildSmallSquareFlag(country)).toList(),
+          ),
+        ),
+        SizedBox(height: 12),
+        // Second Row of Countries
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ..._countries.skip(5).take(4).map((country) => _buildSmallSquareFlag(country)).toList(),
+              // More button
+              GestureDetector(
+                onTap: _showCountryPicker,
+                child: Container(
+                  width: 60,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(Icons.more_horiz, color: Colors.grey[600]),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'More',
+                        style: TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSmallSquareFlag(Map<String, String> country) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = country['name'];
+        });
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2), // Slight rounding for squares
+        child: Image.network(
+          country['flag']!,
+          width: 30, // Small square size
+          height: 30, // Small square size
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildCountryItem(Map<String, String> country) {
+    final isSelected = _selectedCountry == country['name'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = isSelected ? null : country['name'];
+        });
+      },
+      child: Container(
+        width: 45, // Reduced width
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isSelected ? Colors.blue : Colors.grey.shade300,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(25), // More oval shape
+                color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      country['flag']!,
+                      width: 24, // Smaller flag
+                      height: 24,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              country['name']!,
+              style: TextStyle(
+                fontSize: 10, // Smaller text
+                color: isSelected ? Colors.blue : Colors.black87,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCountrySearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final filteredCountries = _countries.where((country) {
+            return country['name']!.toLowerCase()
+                .contains(_countrySearchController.text.toLowerCase());
+          }).toList();
+
+          return AlertDialog(
+            title: Text('Select Country'),
+            content: Container(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _countrySearchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search country...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  SizedBox(height: 16),
+                  Container(
+                    height: 300,
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filteredCountries.length,
+                      itemBuilder: (context, index) {
+                        final country = filteredCountries[index];
+                        return ListTile(
+                          leading: Image.network(
+                            country['flag']!,
+                            width: 24,
+                            height: 24,
+                          ),
+                          title: Text(country['name']!),
+                          onTap: () {
+                            this.setState(() {
+                              _selectedCountry = country['name'];
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: false,
+      countryListTheme: CountryListThemeData(
+        flagSize: 25,
+        backgroundColor: Colors.white,
+        textStyle: TextStyle(fontSize: 16, color: Colors.black),
+        bottomSheetHeight: 500,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20.0),
+          topRight: Radius.circular(20.0),
+        ),
+        inputDecoration: InputDecoration(
+          labelText: 'Search',
+          hintText: 'Start typing to search',
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.blue),
+          ),
+        ),
+      ),
+      onSelect: (Country country) {
+        setState(() {
+          _selectedCountry = country.name;
+        });
+      },
+    );
+  }
+
+
+
+  Widget _buildRoomCard(VoiceRoom room) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: InkWell(
+        onTap: () async {
+          final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
+          if (isRemoved) {
+            _showRemovalAlert();
+          } else {
+            _navigateToLivePage(room);
+          }
+        },
+        child: Card(
+          elevation: 2,
+          shadowColor: Colors.blue.withOpacity(0.1),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            height: 110,
+            child: Row(
+              children: [
+                // Room Image Section
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                  child: Container(
+                    width: 100,
+                    height: double.infinity,
+                    child: CachedNetworkImage(
+                      imageUrl:
+                      'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[100],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.blue[300],
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[100],
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          color: Colors.grey[400],
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Room Details Section
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Room Name
+                        Text(
+                          room.voiceRoomName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const SizedBox(height: 2),
+
+                        // Room ID and Motto
+                        Row(
+                          children: [
+                            const SizedBox(width: 2),
+                            Text(
+                              'ID: ${room.voiceRoomId}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Team Motto
+                        Text(
+                          room.teamMoto,
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const Spacer(),
+
+                        // Flag, Language, and Tags Row
+                        Row(
+                          children: [
+                            // Country Flag
+                            Container(
+                              width: 24,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                border: Border.all(
+                                  color: Colors.grey[300]!,
+                                  width: 0.5,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: CachedNetworkImage(
+                                imageUrl: _getFlagUrl(room.voiceRoomCountry),
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[200],
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey[100],
+                                  child: Icon(
+                                    Icons.flag_outlined,
+                                    size: 12,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 13),
+
+                            // Language Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFFB8860B),
+                                    Color(0xFFDAA520),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                room.language,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 13),
+
+                            // Tags
+                            Expanded(
+                              child: Container(
+                                height: 20,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: room.tags.split(',').map((tag) {
+                                    final trimmedTag = tag.trim();
+                                    return Container(
+                                      margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          trimmedTag,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.blue[700],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+// Helper Methods
+
+  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
+    final String userId = "CURRENT_USER_ID"; // Replace with the actual user ID (as a String).
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+            'http://145.223.21.62:8090/api/collections/removed_users/records/$voiceRoomId?fields=user_id,voice_room_id'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['user_id'] == userId && data['voice_room_id'] == voiceRoomId;
+      }
+    } catch (e) {
+      print('Error checking removal status: $e');
+    }
+    return false;
+  }
+
+
+  void _showRemovalAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Access Denied'),
+        content: Text(
+          'You cannot join this room because the room admins have removed you.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  //
+  // Widget _buildDiscoverHeader() {
+  //   return Container(
+  //     padding: EdgeInsets.all(16),
+  //     child: Row(
+  //       children: [
+  //         Expanded(
+  //           child: TextField(
+  //             controller: _roomIdController,
+  //             keyboardType: TextInputType.number,
+  //             decoration: InputDecoration(
+  //               hintText: 'Search by Room ID...',
+  //               prefixIcon: Icon(Icons.search),
+  //               filled: true,
+  //               fillColor: Colors.grey[100],
+  //               border: OutlineInputBorder(
+  //                 borderRadius: BorderRadius.circular(30),
+  //                 borderSide: BorderSide.none,
+  //               ),
+  //             ),
+  //             onChanged: (value) {
+  //               setState(() {
+  //                 _isSearchingById = value.isNotEmpty;
+  //               });
+  //             },
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
 
   Widget _buildTags(String tags) {
@@ -468,6 +1297,32 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _fetchTagPhotos();
     super.dispose();
+  }
+}
+
+
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+
+  _SliverAppBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return false;
   }
 }
