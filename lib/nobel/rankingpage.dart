@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:leo_app_01/Account%20Section/nobel/countdown.dart';
-import 'package:leo_app_01/Account%20Section/nobel/rankincontainer.dart';
+import 'package:leo_app_01/nobel/countdown.dart';
+import 'package:leo_app_01/nobel/rankincontainer.dart';
 import 'package:pocketbase/pocketbase.dart';
 final PocketBase pb = PocketBase('http://145.223.21.62:8090');
 
@@ -9,10 +9,12 @@ class NobelCount {
   final String userId;
   final String name;
   final int nobelCount;
+  final String profilepic;
 
   NobelCount({
     required this.userId,
     required this.name,
+    required this.profilepic,
     required this.nobelCount,
   });
 }
@@ -28,6 +30,7 @@ class _RankingPageState extends State<RankingPage> {
   int? topItemCount;
   Timer? _timer;
   List<NobelCount> nobelCounts = [];
+String profilepic='';
 
   final PocketBase pb = PocketBase('http://145.223.21.62:8090');
   bool isLoading = true;
@@ -43,48 +46,92 @@ class _RankingPageState extends State<RankingPage> {
   }
 
   Future<void> fetchAndCalculateNobelCounts() async {
-    try {
-      // Fetch all users
-      final usersResponse = await pb.collection('users').getFullList();
+  try {
+    // Fetch all users
+    final usersResponse = await pb.collection('users').getFullList();
 
-      // Prepare Nobel count data dynamically
-      List<NobelCount> calculatedNobelCounts = [];
+    // Prepare Nobel count data dynamically
+    List<NobelCount> calculatedNobelCounts = [];
+    for (var user in usersResponse) {
+      final userId = user.id;
+      final userName = user.data['firstname'];
+      final avatar = user.data['avatar'].toString();
 
-      for (var user in usersResponse) {
-        final userId = user.id;
-        final userName = user.data['firstname'];
+      // Construct the full URL if avatar is not empty
+      String profilepic = '';
+      if (avatar.isNotEmpty) {
+        profilepic = '${pb.baseUrl}/api/files/users/$userId/$avatar';
+      }
+      print('User Avatar URL: $profilepic');
 
-        // Fetch gift counts for this user as sender
-        final giftsResponse = await pb.collection('sending_recieving_gifts')
-            .getFullList(filter: 'sender_user_id="$userId"');
+      // Fetch gift counts for this user as sender
+      final giftsResponse = await pb.collection('sending_recieving_gifts')
+          .getFullList(filter: 'sender_user_id="$userId"');
 
-        // Calculate total gift count
-        int totalGiftCount = giftsResponse.fold(0, (sum, item) {
-          final giftCount = int.tryParse(item.data['gift_count'].toString()) ?? 0;
-          return sum + giftCount;
-        });
-
-        // Add to list
-        calculatedNobelCounts.add(
-          NobelCount(userId: userId, name: userName, nobelCount: totalGiftCount),
-        );
+      // Group gifts by giftname
+      final Map<String, int> giftNameCounts = {};
+      for (var gift in giftsResponse) {
+        final giftName = gift.data['giftname'].toString();
+        final giftCount =
+            int.tryParse(gift.data['gift_count'].toString()) ?? 0;
+        if (giftName.isNotEmpty) {
+          giftNameCounts[giftName] =
+              (giftNameCounts[giftName] ?? 0) + giftCount;
+        }
       }
 
-      // Sort Nobel counts in descending order
-      calculatedNobelCounts.sort((a, b) => b.nobelCount.compareTo(a.nobelCount));
+      // Calculate total Nobel count based on grouped gifts
+      int totalNobelCount = 0;
+      for (var entry in giftNameCounts.entries) {
+        final giftName = entry.key;
+        final groupCount = entry.value;
 
-      setState(() {
-        nobelCounts = calculatedNobelCounts;
-        isLoading = false;
-      });
-    } catch (error) {
-      setState(() {
-        errorMessage = 'Failed to fetch and calculate Nobel counts: $error';
-        isLoading = false;
-      });
-      print('Error: $error');
+        try {
+          // Fetch gift details from the `gifts` collection for the `giftname`
+          final gift = await pb.collection('gifts').getFirstListItem(
+                'giftname="$giftName"',
+              );
+
+          final amount =
+              int.tryParse(gift.data['diamond_amount'].toString()) ?? 0;
+
+          print("Gift: $giftName, Group Count: $groupCount, Amount: $amount");
+
+          // Multiply the group's count by its amount
+          totalNobelCount += groupCount * amount;
+        } catch (e) {
+          print("Error fetching gift details for giftname: $giftName. Error: $e");
+        }
+      }
+
+      // Add to the list
+      calculatedNobelCounts.add(
+        NobelCount(
+          userId: userId,
+          name: userName,
+          nobelCount: totalNobelCount,
+          profilepic: profilepic,
+        ),
+      );
     }
+
+    // Sort Nobel counts in descending order
+    calculatedNobelCounts.sort((a, b) => b.nobelCount.compareTo(a.nobelCount));
+
+    // Update state
+    setState(() {
+      nobelCounts = calculatedNobelCounts;
+      isLoading = false;
+    });
+  } catch (error) {
+    setState(() {
+      errorMessage = 'Failed to fetch and calculate Nobel counts: $error';
+      isLoading = false;
+    });
+    print('Error: $error');
   }
+}
+
 
   void setupRealTimeSubscription() {
     pb.collection('sending_recieving_gifts').subscribe('*', (e) {
@@ -270,7 +317,7 @@ class _RankingPageState extends State<RankingPage> {
                               child: rankingcontainer(
                                 name: item.name, // Add this line
                                 nobelcount: item.nobelCount.toString(),
-                                leadingget: leadingWidget,
+                                leadingget: leadingWidget, profilepic: item.profilepic,
                               ),
                             );
                           },

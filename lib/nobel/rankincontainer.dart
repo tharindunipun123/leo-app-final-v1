@@ -6,11 +6,13 @@ class rankingcontainer extends StatefulWidget {
   String ? name;
   String nobelcount;
   Widget leadingget;
+  String ? profilepic;
 
   rankingcontainer(
       {required this.name,
       required this.nobelcount,
       required this.leadingget,
+      required this.profilepic,
       super.key});
 
   @override
@@ -38,14 +40,15 @@ class _rankingcontainerState extends State<rankingcontainer> {
             Container(
               width: width/1.7 ,
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   widget.leadingget,
                   Container(
-                    width: width / 6,
+                    width: width / 10,
                     decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         image: DecorationImage(
-                            image: NetworkImage("assetss/Resizers/User.jpg"),
+                            image: NetworkImage(widget.profilepic.toString()),
                             fit: BoxFit.contain)),
                   ),
                   Padding(
