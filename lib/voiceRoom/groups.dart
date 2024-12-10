@@ -7,6 +7,8 @@ import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 import 'package:country_icons/country_icons.dart';
 import 'package:country_picker/country_picker.dart';
+import 'package:country_code_picker/country_code_picker.dart';
+import 'package:country_flags/country_flags.dart';
 
 class VoiceRoom {
   final String id;
@@ -18,6 +20,7 @@ class VoiceRoom {
   final String groupPhoto;
   final String tags;
   final String backgroundImages;
+  final String language;  // Added language field
 
   VoiceRoom({
     required this.id,
@@ -29,6 +32,7 @@ class VoiceRoom {
     required this.groupPhoto,
     required this.tags,
     required this.backgroundImages,
+    required this.language,  // Added to constructor
   });
 
   factory VoiceRoom.fromJson(Map<String, dynamic> json) {
@@ -42,6 +46,7 @@ class VoiceRoom {
       groupPhoto: json['group_photo'],
       tags: json['tags'],
       backgroundImages: json['background_images'],
+      language: json['language'] ?? '',  // Added with null safety
     );
   }
 }
@@ -81,6 +86,28 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     {'name': 'Bangladesh', 'flag': 'https://flagcdn.com/w320/bd.png'},
   ];
 
+  Map<String, String> _tagPhotos = {};
+
+  Future<void> _fetchTagPhotos() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/tags/records'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final tags = data['items'] as List;
+        setState(() {
+          for (var tag in tags) {
+            _tagPhotos[tag['tag_name']] = tag['tag_photo'];
+          }
+        });
+      }
+    } catch (e) {
+      print('Error fetching tag photos: $e');
+    }
+  }
+
 
 
   @override
@@ -88,7 +115,10 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadUserData();
+    _fetchMineVoiceRooms();
     _fetchVoiceRooms();
+    _fetchTagPhotos();
+
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -126,6 +156,20 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }).toList();
   }
 
+  String _getFlagUrl(String countryName) {
+    // Convert country name to lowercase for matching
+    final lowercaseCountry = countryName.toLowerCase();
+
+    // First try to find in _countries list
+    final countryData = _countries.firstWhere(
+          (country) => country['name']!.toLowerCase() == lowercaseCountry,
+      orElse: () => {'flag': 'https://flagcdn.com/w320/${lowercaseCountry.substring(0, 2)}.png'},
+    );
+
+    return countryData['flag'] ?? 'https://flagcdn.com/w320/xx.png'; // xx.png as fallback
+  }
+
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -156,13 +200,118 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }
   }
 
-  void _navigateToCreateRoom() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CreateVoiceRoomPage(),
-      ),
-    );
+  Future<void> _fetchMineVoiceRooms() async {
+    try {
+      setState(() => _isLoading = true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Fetch rooms created by the user
+      final createdResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")',
+        ),
+      );
+
+      // Fetch rooms joined by the user
+      final joinedResponse = await http.get(
+        Uri.parse(
+          'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(user_id="$userId")',
+        ),
+      );
+
+      if (createdResponse.statusCode == 200 && joinedResponse.statusCode == 200) {
+        final createdRoomsData = json.decode(createdResponse.body);
+        final joinedRoomsData = json.decode(joinedResponse.body);
+
+        final createdRooms = (createdRoomsData['items'] as List)
+            .map((item) => VoiceRoom.fromJson(item))
+            .toList();
+
+        final joinedRoomsIds = (joinedRoomsData['items'] as List)
+            .map((item) => item['voice_room_id'] as String)
+            .toSet();
+
+        final joinedRooms = await Future.wait(
+          joinedRoomsIds.map((roomId) async {
+            final roomResponse = await http.get(
+              Uri.parse(
+                'http://145.223.21.62:8090/api/collections/voiceRooms/records/$roomId',
+              ),
+            );
+
+            if (roomResponse.statusCode == 200) {
+              final roomData = json.decode(roomResponse.body);
+              return VoiceRoom.fromJson(roomData);
+            }
+            return null;
+          }),
+        );
+
+        setState(() {
+          _voiceRooms = [
+            ...createdRooms,
+            ...joinedRooms.where((room) => room != null).cast<VoiceRoom>(),
+          ];
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Error fetching mine voice rooms: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+
+  Future<bool> _checkExistingRoom() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        return false;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final rooms = data['items'] as List;
+        return rooms.isNotEmpty;
+      }
+      return false;
+    } catch (e) {
+      print('Error checking existing room: $e');
+      return false;
+    }
+  }
+
+  void _navigateToCreateRoom() async {
+    final hasExistingRoom = await _checkExistingRoom();
+
+    if (!mounted) return;
+
+    if (hasExistingRoom) {
+      _showErrorDialog(context);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CreateVoiceRoomPage(),
+        ),
+      );
+    }
   }
 
   @override
@@ -173,28 +322,36 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
           children: [
             _buildSearchBar(),
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _buildStatsSquares(),
-                    _buildCountriesSection(),
-                    TabBar(
-                      controller: _tabController,
-                      tabs: _tabs.map((String name) => Tab(text: name)).toList(),
-                      labelColor: Colors.blue[700],
-                      unselectedLabelColor: Colors.grey,
-                      indicatorColor: Colors.blue[700],
-                    ),
-                    Container(
-                      height: MediaQuery.of(context).size.height - 350, // Adjust this value as needed
-                      child: TabBarView(
-                        controller: _tabController,
+              child: NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) {
+                  return [
+                    SliverToBoxAdapter(
+                      child: Column(
                         children: [
-                          _buildVoiceRoomsList(true),
-                          _buildVoiceRoomsList(false),
+                          _buildStatsSquares(),
+                          _buildCountriesSection(),
                         ],
                       ),
                     ),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _SliverAppBarDelegate(
+                        TabBar(
+                          controller: _tabController,
+                          tabs: _tabs.map((String name) => Tab(text: name)).toList(),
+                          labelColor: Colors.blue[700],
+                          unselectedLabelColor: Colors.grey,
+                          indicatorColor: Colors.blue[700],
+                        ),
+                      ),
+                    ),
+                  ];
+                },
+                body: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildVoiceRoomsList(true),
+                    _buildVoiceRoomsList(false),
                   ],
                 ),
               ),
@@ -262,41 +419,152 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
+  void _showErrorDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.blue[50]!,
+                  Colors.white,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.2),
+                  spreadRadius: 4,
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Error Icon
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.warning_rounded,
+                    color: Colors.red[400],
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+
+                // Title
+                Text(
+                  'Room Already Exists',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[900],
+                  ),
+                ),
+                SizedBox(height: 12),
+
+                // Message
+                Text(
+                  'You can only create one voice room at a time. Please delete your existing room before creating a new one.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.blue[700],
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: 24),
+
+                // Button
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue[700]!, Colors.blue[500]!],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        spreadRadius: 1,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: Text(
+                      'Got it',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildVoiceRoomsList(bool isDiscoverTab) {
     if (_isLoading) {
       return Center(child: CircularProgressIndicator(color: Colors.blue));
     }
 
-    return Column(
-      children: [
-        if (isDiscoverTab)
-        Expanded(
-          child: Builder(
-            builder: (context) {
-              final roomsToShow = isDiscoverTab
-                  ? filteredRoomsByCountry
-                  : filteredRooms.where((room) => room.ownerId == _userId).toList();
+    final roomsToShow = isDiscoverTab
+        ? filteredRoomsByCountry
+        : _voiceRooms.where((room) {
+      return room.ownerId == _userId; // Show only created rooms for now
+    }).toList();
 
-              if (roomsToShow.isEmpty) {
-                return Center(
-                  child: Text(
-                    _getEmptyMessage(isDiscoverTab),
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: EdgeInsets.all(16),
-                itemCount: roomsToShow.length,
-                itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
-              );
-            },
-          ),
+    if (roomsToShow.isEmpty) {
+      return Center(
+        child: Text(
+          _getEmptyMessage(isDiscoverTab),
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
         ),
-      ],
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      itemCount: roomsToShow.length,
+      itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
     );
   }
+
 
   String _getEmptyMessage(bool isDiscoverTab) {
     if (isDiscoverTab) {
@@ -312,26 +580,26 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
   Widget _buildStatsSquares() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical padding
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Family Square - Turquoise to Mint gradient
+          // Family Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF40E0D0),  // Turquoise
-                    Color(0xFF48F3D1),  // Mint
+                    Color(0xFF40E0D0),
+                    Color(0xFF48F3D1),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFF40E0D0).withOpacity(0.3),
@@ -343,13 +611,13 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.family_restroom, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.family_restroom, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Family',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -358,22 +626,22 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // Rank Square - Golden Sunset gradient
+          // Rank Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFFFFB347),  // Light Orange
-                    Color(0xFFFFE5B4),  // Peach
+                    Color(0xFFFFB347),
+                    Color(0xFFFFE5B4),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFFFFB347).withOpacity(0.3),
@@ -385,13 +653,13 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.workspace_premium, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.workspace_premium, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Rank',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -400,22 +668,22 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // Couple Square - Soft Rose gradient
+          // Couple Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.only(left: 8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFFFF6B95),  // Rose Pink
-                    Color(0xFFFFB6C1),  // Light Pink
+                    Color(0xFFFF6B95),
+                    Color(0xFFFFB6C1),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFFFF6B95).withOpacity(0.3),
@@ -427,19 +695,64 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.favorite, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.favorite, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Couple',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallSquareFlag(Map<String, String> country) {
+    bool isSelected = _selectedCountry == country['name'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = country['name'];
+        });
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 40,  // Fixed small square size
+            height: 40, // Fixed small square size
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isSelected ? Colors.blue : Colors.white!,
+                width: isSelected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            clipBehavior: Clip.hardEdge, // Replace overflow with clipBehavior
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                country['flag']!,
+                fit: BoxFit.contain, // This will show the full flag within container
+              ),
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            country['name']!.split(' ')[0], // Show only first word of country name
+            style: TextStyle(
+              fontSize: 10,
+              color: isSelected ? Colors.blue : Colors.grey[600],
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -482,8 +795,8 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _countries.take(5).map((country) => _buildCountryItem(country)).toList(),
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: _countries.take(5).map((country) => _buildSmallSquareFlag(country)).toList(),
           ),
         ),
         SizedBox(height: 12),
@@ -491,33 +804,32 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              ..._countries.skip(5).take(4).map((country) => _buildCountryItem(country)).toList(),
+              ..._countries.skip(5).take(4).map((country) => _buildSmallSquareFlag(country)).toList(),
               // More button
               GestureDetector(
                 onTap: _showCountryPicker,
-                child: Container(
-                  width: 60,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(Icons.more_horiz, color: Colors.grey[600]),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'More',
-                        style: TextStyle(fontSize: 12),
-                        textAlign: TextAlign.center,
+                      child: Icon(Icons.more_horiz, color: Colors.grey[600], size: 20),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'More',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[600],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -526,6 +838,8 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       ],
     );
   }
+
+
 
   Widget _buildCountryItem(Map<String, String> country) {
     final isSelected = _selectedCountry == country['name'];
@@ -682,122 +996,263 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
 
 
-
   Widget _buildRoomCard(VoiceRoom room) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: InkWell(
-        onTap: () => _navigateToLivePage(room),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Group Photo on the left
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: CachedNetworkImage(
-                  imageUrl:
-                  'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
-                  width: 70,
-                  height: 70,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    width: 70,
-                    height: 70,
-                    color: Colors.grey[200],
-                    child: const Center(
-                        child: CircularProgressIndicator(color: Colors.blue)),
+        onTap: () async {
+          final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
+          if (isRemoved) {
+            _showRemovalAlert();
+          } else {
+            _navigateToLivePage(room);
+          }
+        },
+        child: Card(
+          elevation: 2,
+          color: Colors.white70,
+          shadowColor: Colors.blue.withOpacity(0.1),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            height: 110,
+            child: Row(
+              children: [
+                // Room Image Section
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
                   ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 70,
-                    height: 70,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.error, color: Colors.blue),
+                  child: Container(
+                    width: 100,
+                    height: double.infinity,
+                    child: CachedNetworkImage(
+                      imageUrl:
+                      'http://145.223.21.62:8090/api/files/voiceRooms/${room.id}/${room.groupPhoto}',
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[100],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.blue[300],
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[100],
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          color: Colors.grey[400],
+                          size: 30,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12), // Space between image and text
-              // Details and Country Flag
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Voice Room Name
-                    Text(
-                      room.voiceRoomName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // ID
-                    Text(
-                      'ID: ${room.voiceRoomId}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Team Moto in Gradient Container
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.blueAccent, Colors.lightBlue],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+
+                // Room Details Section
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Room Name
+                        Text(
+                          room.voiceRoomName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(12),
-                          right: Radius.circular(12),
-                        ), // Rounded sides
-                      ),
-                      child: Text(
-                        room.teamMoto,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
+
+                        const SizedBox(height: 2),
+
+                        // Room ID and Motto
+                        Row(
+                          children: [
+                            const SizedBox(width: 2),
+                            Text(
+                              'ID: ${room.voiceRoomId}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+
+                        // Team Motto
+                        Text(
+                          room.teamMoto,
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const Spacer(),
+
+                        // Flag, Language, and Tags Row
+                        Row(
+                          children: [
+                            // Country Flag
+                            Container(
+                              width: 24,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                border: Border.all(
+                                  color: Colors.grey[300]!,
+                                  width: 0.5,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: CachedNetworkImage(
+                                imageUrl: _getFlagUrl(room.voiceRoomCountry),
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[200],
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey[100],
+                                  child: Icon(
+                                    Icons.flag_outlined,
+                                    size: 12,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 13),
+
+                            // Language Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFFB8860B),
+                                    Color(0xFFDAA520),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                room.language,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 13),
+
+                            // Tags
+                            Expanded(
+                              child: Container(
+                                height: 20,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: room.tags.split(',').map((tag) {
+                                    final trimmedTag = tag.trim();
+                                    return Container(
+                                      margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          trimmedTag,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.blue[700],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              // Country with Flag on the Right
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Country Flag using country_icons
-                  Image.asset(
-                    'icons/flags/png/${room.voiceRoomCountry.toLowerCase()}.png',
-                    package: 'country_icons',
-                    width: 30,
-                    height: 20,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.flag, size: 20, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    room.voiceRoomCountry,
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+// Helper Methods
+
+  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
+    final String userId = "CURRENT_USER_ID"; // Replace with the actual user ID (as a String).
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+            'http://145.223.21.62:8090/api/collections/removed_users/records/$voiceRoomId?fields=user_id,voice_room_id'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['user_id'] == userId && data['voice_room_id'] == voiceRoomId;
+      }
+    } catch (e) {
+      print('Error checking removal status: $e');
+    }
+    return false;
+  }
+
+
+  void _showRemovalAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Access Denied'),
+        content: Text(
+          'You cannot join this room because the room admins have removed you.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   //
   // Widget _buildDiscoverHeader() {
@@ -869,6 +1324,32 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _fetchTagPhotos();
     super.dispose();
+  }
+}
+
+
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+
+  _SliverAppBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return false;
   }
 }
