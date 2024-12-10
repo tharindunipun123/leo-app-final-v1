@@ -580,26 +580,26 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
   Widget _buildStatsSquares() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical padding
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Family Square - Turquoise to Mint gradient
+          // Family Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF40E0D0),  // Turquoise
-                    Color(0xFF48F3D1),  // Mint
+                    Color(0xFF40E0D0),
+                    Color(0xFF48F3D1),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFF40E0D0).withOpacity(0.3),
@@ -611,13 +611,13 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.family_restroom, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.family_restroom, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Family',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -626,22 +626,22 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // Rank Square - Golden Sunset gradient
+          // Rank Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFFFFB347),  // Light Orange
-                    Color(0xFFFFE5B4),  // Peach
+                    Color(0xFFFFB347),
+                    Color(0xFFFFE5B4),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFFFFB347).withOpacity(0.3),
@@ -653,13 +653,13 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.workspace_premium, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.workspace_premium, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Rank',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -668,22 +668,22 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // Couple Square - Soft Rose gradient
+          // Couple Square
           Expanded(
             child: Container(
-              height: 100,
+              height: 80, // Reduced from 100
               margin: EdgeInsets.only(left: 8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFFFF6B95),  // Rose Pink
-                    Color(0xFFFFB6C1),  // Light Pink
+                    Color(0xFFFF6B95),
+                    Color(0xFFFFB6C1),
                   ],
                   stops: [0.2, 0.9],
                 ),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0xFFFF6B95).withOpacity(0.3),
@@ -695,19 +695,64 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.favorite, color: Colors.white, size: 32),
-                  SizedBox(height: 8),
+                  Icon(Icons.favorite, color: Colors.white, size: 28), // Reduced icon size
+                  SizedBox(height: 4), // Reduced spacing
                   Text(
                     'Couple',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 14, // Reduced font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallSquareFlag(Map<String, String> country) {
+    bool isSelected = _selectedCountry == country['name'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCountry = country['name'];
+        });
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 40,  // Fixed small square size
+            height: 40, // Fixed small square size
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isSelected ? Colors.blue : Colors.white!,
+                width: isSelected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            clipBehavior: Clip.hardEdge, // Replace overflow with clipBehavior
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                country['flag']!,
+                fit: BoxFit.contain, // This will show the full flag within container
+              ),
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            country['name']!.split(' ')[0], // Show only first word of country name
+            style: TextStyle(
+              fontSize: 10,
+              color: isSelected ? Colors.blue : Colors.grey[600],
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -750,7 +795,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: _countries.take(5).map((country) => _buildSmallSquareFlag(country)).toList(),
           ),
         ),
@@ -759,33 +804,32 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               ..._countries.skip(5).take(4).map((country) => _buildSmallSquareFlag(country)).toList(),
               // More button
               GestureDetector(
                 onTap: _showCountryPicker,
-                child: Container(
-                  width: 60,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(Icons.more_horiz, color: Colors.grey[600]),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'More',
-                        style: TextStyle(fontSize: 12),
-                        textAlign: TextAlign.center,
+                      child: Icon(Icons.more_horiz, color: Colors.grey[600], size: 20),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'More',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[600],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -795,24 +839,6 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildSmallSquareFlag(Map<String, String> country) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedCountry = country['name'];
-        });
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(2), // Slight rounding for squares
-        child: Image.network(
-          country['flag']!,
-          width: 30, // Small square size
-          height: 30, // Small square size
-          fit: BoxFit.cover,
-        ),
-      ),
-    );
-  }
 
 
   Widget _buildCountryItem(Map<String, String> country) {
@@ -984,6 +1010,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         },
         child: Card(
           elevation: 2,
+          color: Colors.white70,
           shadowColor: Colors.blue.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

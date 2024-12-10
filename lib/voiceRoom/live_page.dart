@@ -98,19 +98,43 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   Future<bool> _isUserJoined(String roomId, String userId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$POCKETBASE_URL/api/collections/joined_users/records?filter=(voice_room_id="$roomId" && userid="$userId")'),
-        headers: {'Content-Type': 'application/json'},
-      );
+      // Check both conditions in parallel using Future.wait
+      final responses = await Future.wait([
+        // Check joined_users
+        http.get(Uri.parse('$POCKETBASE_URL/api/collections/joined_users/records')),
+        // Check if user is owner
+        http.get(Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/$roomId')),
+      ]);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['items'] as List).isNotEmpty; // Return true if the user is found
+      final joinedResponse = responses[0];
+      final roomResponse = responses[1];
+
+      // Check if user is joined
+      if (joinedResponse.statusCode == 200) {
+        final joinedData = json.decode(joinedResponse.body);
+        if (joinedData['items'] != null) {
+          final records = joinedData['items'] as List;
+          if (records.any((record) =>
+          record['userid'] == userId &&
+              record['voice_room_id'] == roomId
+          )) {
+            return true;
+          }
+        }
       }
-      return false; // Return false if the request fails
+
+      // Check if user is owner
+      if (roomResponse.statusCode == 200) {
+        final roomData = json.decode(roomResponse.body);
+        if (roomData['ownerId'] == userId) {
+          return true;
+        }
+      }
+
+      return false;
     } catch (e) {
-      print('Error checking if user is joined: $e');
-      return false; // Return false in case of an error
+      print('Error checking join status: $e');
+      return false;
     }
   }
 
@@ -445,23 +469,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     var userName = user?.name.isEmpty ?? true
         ? Container()
         : Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Text(
-              " ${user?.name}  " ?? "",
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                backgroundColor: Colors.blueAccent,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Text(
+        " ${user?.name}  " ?? "",
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          backgroundColor: Colors.blueAccent,
 
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          );
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.none,
+        ),
+      ),
+    );
 
     if (!isAttributeHost(user?.inRoomAttributes.value)) {
       return userName;
@@ -687,6 +711,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       final currentUserId = prefs.getString('userId') ?? ''; // Default to an empty string if not found
 
       bool isUserJoined = await _isUserJoined(roomId, currentUserId);
+      print("----------------------joining____________________");
+      print(isUserJoined);
 
       if (currentUserId.isEmpty) {
         print('Error: User ID not found in SharedPreferences');
@@ -753,10 +779,10 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         Spacer(),
                         if (isRoomOwner)
 
-                        IconButton(
-                          icon: Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
+                          IconButton(
+                            icon: Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
                       ],
                     ),
                   ),
@@ -848,18 +874,10 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                             MemberListScreen(
                               voiceRoomId: roomId,
                               currentUserId: currentUserId,
+                              isJoined: isUserJoined,
                             ),
-                            // Join/Login Button
-                       Positioned(
-                           left: 16,
-                           right: 16,
-                           bottom: 16,
-                           child: _buildActionButton(
-                           isUserJoined ? "Already Joined" : "Join",
-                          isUserJoined ? Colors.grey[400]! : Colors.blue,
-          isUserJoined ? null : () => _joinRoom(context, roomId, currentUserId),
-          ),
-          ),
+
+
                           ],
                         ),
                       ],
@@ -991,10 +1009,15 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   Widget _buildRoomModeTags(Map<String, dynamic> roomData) {
+    final tags = (roomData['tags'] ?? '')
+        .toString()
+        .split(',')
+        .where((tag) => tag.trim().isNotEmpty)
+        .join(', '); // Join all tags with comma and space
+
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.all(16),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Room mode:',
@@ -1003,37 +1026,12 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               fontSize: 16,
             ),
           ),
-           Spacer(),
-
-
-          Flexible(
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 18, // Space between tags
-              runSpacing: 18, // Space between rows if tags wrap
-              children: (roomData['tags'] ?? '')
-                  .toString()
-                  .split(',')
-                  .map<Widget>((tag) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Text(
-                    tag.trim(),
-                    style: TextStyle(
-                      color: Colors.blue[700],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                );
-              }).toList(),
+          Spacer(),
+          Text(
+            tags.isEmpty ? 'Not specified' : tags,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 16,
             ),
           ),
         ],
@@ -1042,78 +1040,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
 
-
-  Widget _buildActionButton(String text, Color color, Function()? onTap) {
-    return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        gradient: onTap != null
-            ? LinearGradient(
-          colors: [
-            color,
-            color.withOpacity(0.8),
-          ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        )
-            : null,
-        color: onTap == null ? color : null,
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: onTap != null
-            ? [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ]
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(25),
-          onTap: onTap, // This will be null if the button is disabled
-          child: Center(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: onTap != null ? Colors.white : Colors.grey[600], // Change text color based on button state
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _joinRoom(BuildContext context, String roomId, String userId) async {
-    try {
-      final response = await http.post(
-        Uri.parse('http://145.223.21.62:8090/api/collections/joined_users/records'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'voice_room_id': roomId,
-          'userid': userId,
-          'admin_or_not': false,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully joined the room')),
-        );
-      }
-    } catch (e) {
-      print('Error joining room: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to join room')),
-      );
-    }
-  }
 
 
 // Helper method to build member list item
@@ -1322,9 +1248,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           debugPrint('on seat opened');
         },
         onChanged: (
-          Map<int, ZegoUIKitUser> takenSeats,
-          List<int> untakenSeats,
-        ) {
+            Map<int, ZegoUIKitUser> takenSeats,
+            List<int> untakenSeats,
+            ) {
           debugPrint(
             'on seats changed, taken seats:$takenSeats, untaken seats:$untakenSeats',
           );
@@ -1405,7 +1331,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             ),
           ),
         ),
-         Positioned(
+        Positioned(
           top: 35,
           left: 30,
           right: 30,
@@ -1504,11 +1430,11 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   Widget avatarBuilder(
-    BuildContext context,
-    Size size,
-    ZegoUIKitUser? user,
-    Map<String, dynamic> extraInfo,
-  ) {
+      BuildContext context,
+      Size size,
+      ZegoUIKitUser? user,
+      Map<String, dynamic> extraInfo,
+      ) {
     return CircleAvatar(
       maxRadius: size.width,
       //backgroundImage: Image.asset("assets/avatars/avatar_${((int.tryParse(user?.id ?? "") ?? 0) % 6)}.png").image,
@@ -1543,7 +1469,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         config.rowSpacing = 5;
         config.rowConfigs = List.generate(
           4,
-          (index) => ZegoLiveAudioRoomLayoutRowConfig(
+              (index) => ZegoLiveAudioRoomLayoutRowConfig(
             count: 4,
             alignment: ZegoLiveAudioRoomLayoutAlignment.spaceBetween,
           ),
@@ -1562,7 +1488,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         config.rowSpacing = 5;
         config.rowConfigs = List.generate(
           8,
-          (index) => ZegoLiveAudioRoomLayoutRowConfig(
+              (index) => ZegoLiveAudioRoomLayoutRowConfig(
             count: 1,
             alignment: ZegoLiveAudioRoomLayoutAlignment.spaceBetween,
           ),
@@ -1631,44 +1557,44 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         );
         final listMenu = ZegoUIKitPrebuiltLiveAudioRoomController().seat.localHasHostPermissions
             ? [
-                GestureDetector(
-                  onTap: () async {
-                    Navigator.of(context).pop();
+          GestureDetector(
+            onTap: () async {
+              Navigator.of(context).pop();
 
-                    ZegoUIKit().removeUserFromRoom(
-                      [user.id],
-                    ).then((result) {
-                      debugPrint('kick out result:$result');
-                    });
-                  },
-                  child: Text(
-                    'Kick Out ${user.name}',
-                    style: textStyle,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () async {
-                    Navigator.of(context).pop();
+              ZegoUIKit().removeUserFromRoom(
+                [user.id],
+              ).then((result) {
+                debugPrint('kick out result:$result');
+              });
+            },
+            child: Text(
+              'Kick Out ${user.name}',
+              style: textStyle,
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              Navigator.of(context).pop();
 
-                    ZegoUIKitPrebuiltLiveAudioRoomController().seat.host.inviteToTake(user.id).then((result) {
-                      debugPrint('invite audience to take seat result:$result');
-                    });
-                  },
-                  child: Text(
-                    'Invite ${user.name} to take seat',
-                    style: textStyle,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () async {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'Cancel',
-                    style: textStyle,
-                  ),
-                ),
-              ]
+              ZegoUIKitPrebuiltLiveAudioRoomController().seat.host.inviteToTake(user.id).then((result) {
+                debugPrint('invite audience to take seat result:$result');
+              });
+            },
+            child: Text(
+              'Invite ${user.name} to take seat',
+              style: textStyle,
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              Navigator.of(context).pop();
+            },
+            child: const Text(
+              'Cancel',
+              style: textStyle,
+            ),
+          ),
+        ]
             : [];
         return AnimatedPadding(
           padding: MediaQuery.of(context).viewInsets,
@@ -1836,6 +1762,5 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     ));
   }
 }
-
 
 

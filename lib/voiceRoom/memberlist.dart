@@ -8,11 +8,13 @@ import 'dismissadmin.dart';
 class MemberListScreen extends StatefulWidget {
   final String voiceRoomId;
   final String currentUserId;
+  final bool isJoined;
 
   const MemberListScreen({
     Key? key,
     required this.voiceRoomId,
     required this.currentUserId,
+    required this.isJoined,
   }) : super(key: key);
 
   @override
@@ -40,16 +42,21 @@ class _MemberListScreenState extends State<MemberListScreen> {
     try {
       setState(() => isLoading = true);
 
-      // Fetch voice room details
-      final roomResponse = await http.get(
-        Uri.parse('$baseUrl/api/collections/voiceRooms/records/${widget.voiceRoomId}'),
-      );
+      // Fetch room data and joined users data in parallel
+      final futures = await Future.wait([
+        http.get(Uri.parse('$baseUrl/api/collections/voiceRooms/records/${widget.voiceRoomId}')),
+        http.get(Uri.parse('$baseUrl/api/collections/joined_users/records?filter=(voice_room_id="${widget.voiceRoomId}")')),
+      ]);
 
+      final roomResponse = futures[0];
+      final joinedUsersResponse = futures[1];
+
+      // Process room data
       if (roomResponse.statusCode == 200) {
         roomData = json.decode(roomResponse.body);
         ownerId = roomData?['ownerId'];
 
-        // Fetch owner details
+        // Fetch owner details if available
         if (ownerId != null) {
           final ownerResponse = await http.get(
             Uri.parse('$baseUrl/api/collections/users/records/$ownerId'),
@@ -60,11 +67,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
         }
       }
 
-      // Fetch joined users with expanded user data
-      final joinedUsersResponse = await http.get(
-        Uri.parse('$baseUrl/api/collections/joined_users/records?filter=(voice_room_id="${widget.voiceRoomId}")'),
-      );
-
+      // Process joined users
       if (joinedUsersResponse.statusCode == 200) {
         final joinedUsersData = json.decode(joinedUsersResponse.body);
         final joinedUsers = joinedUsersData['items'] as List;
@@ -75,40 +78,88 @@ class _MemberListScreenState extends State<MemberListScreen> {
             .map((user) => user['userid'] as String)
             .toList();
 
-        // Fetch user details for each joined user
-        final List<Map<String, dynamic>> users = [];
-        for (var joinedUser in joinedUsers) {
-          if (joinedUser['userid'] != ownerId) { // Skip owner as they'll be shown separately
-            final userResponse = await http.get(
-              Uri.parse('$baseUrl/api/collections/users/records/${joinedUser['userid']}'),
-            );
+        // Get unique user IDs (excluding owner)
+        final userIds = joinedUsers
+            .where((user) => user['userid'] != ownerId)
+            .map((user) => user['userid'])
+            .toSet()
+            .toList();
 
-            if (userResponse.statusCode == 200) {
-              final userData = json.decode(userResponse.body);
-              users.add({
-                ...userData,
-                'isAdmin': joinedUser['admin_or_not'],
-                'joinedUserId': joinedUser['id'],
-              });
+        // Fetch all user details in parallel
+        if (userIds.isNotEmpty) {
+          final userFutures = userIds.map((userId) =>
+              http.get(Uri.parse('$baseUrl/api/collections/users/records/$userId'))
+          ).toList();
+
+          final userResponses = await Future.wait(userFutures);
+
+          final users = List<Map<String, dynamic>>.empty(growable: true);
+
+          for (var i = 0; i < userResponses.length; i++) {
+            if (userResponses[i].statusCode == 200) {
+              final userData = json.decode(userResponses[i].body);
+              final joinedUser = joinedUsers.firstWhere(
+                    (user) => user['userid'] == userIds[i],
+                orElse: () => null,
+              );
+
+              if (joinedUser != null) {
+                users.add({
+                  ...userData,
+                  'isAdmin': joinedUser['admin_or_not'],
+                  'joinedUserId': joinedUser['id'],
+                });
+              }
             }
           }
+
+          // Sort users: admins first, then regular users
+          users.sort((a, b) {
+            if (a['isAdmin'] && !b['isAdmin']) return -1;
+            if (!a['isAdmin'] && b['isAdmin']) return 1;
+            return 0;
+          });
+
+          setState(() {
+            usersList = users;
+            isLoading = false;
+          });
+        } else {
+          setState(() {
+            usersList = [];
+            isLoading = false;
+          });
         }
-
-        // Sort users: admins first, then regular users
-        users.sort((a, b) {
-          if (a['isAdmin'] && !b['isAdmin']) return -1;
-          if (!a['isAdmin'] && b['isAdmin']) return 1;
-          return 0;
-        });
-
-        setState(() {
-          usersList = users;
-          isLoading = false;
-        });
       }
     } catch (e) {
       print('Error loading data: $e');
       setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _joinRoom(String roomId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://145.223.21.62:8090/api/collections/joined_users/records'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'voice_room_id': roomId,
+          'userid': userId,
+          'admin_or_not': false,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully joined the room')),
+        );
+      }
+    } catch (e) {
+      print('Error joining room: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join room')),
+      );
     }
   }
 
@@ -345,6 +396,40 @@ class _MemberListScreenState extends State<MemberListScreen> {
             ],
           ),
         ),
+
+        // Replace the current Positioned button with this:
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: Offset(0, -5),
+              ),
+            ],
+          ),
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.isJoined ? Colors.grey[400] : Colors.lightBlue,
+              minimumSize: Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+              elevation: widget.isJoined ? 0 : 2,
+            ),
+            onPressed: widget.isJoined ? null : () => _joinRoom(widget.voiceRoomId, widget.currentUserId),
+            child: Text(
+              widget.isJoined ? 'Already Joined' : 'Join Room',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -443,5 +528,4 @@ class _MemberListScreenState extends State<MemberListScreen> {
 
 
 }
-
 

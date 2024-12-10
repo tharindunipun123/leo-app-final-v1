@@ -15,11 +15,10 @@ class DismissAdminScreen extends StatefulWidget {
 class _DismissAdminScreenState extends State<DismissAdminScreen> {
   final String baseUrl = 'http://145.223.21.62:8090';
   TextEditingController searchController = TextEditingController();
-  List<Map<String, dynamic>> adminList = [];
+  List<Map<String, dynamic>> admins = [];
   List<Map<String, dynamic>> filteredAdmins = [];
   Set<String> selectedAdminIds = {};
   bool isLoading = true;
-  String? error;
 
   @override
   void initState() {
@@ -29,115 +28,100 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
 
   Future<void> _fetchAdmins() async {
     try {
-      setState(() {
-        isLoading = true;
-        error = null;
-      });
+      setState(() => isLoading = true);
 
-      // Fetch all admins for this voice room
       final response = await http.get(
         Uri.parse('$baseUrl/api/collections/joined_users/records?filter=(voice_room_id="${widget.voiceRoomId}" && admin_or_not=true)'),
       );
 
-      if (response.statusCode != 200) throw Exception('Failed to fetch admin list');
+      if (response.statusCode == 200) {
+        final joinedAdmins = json.decode(response.body)['items'] as List;
 
-      final joinedAdmins = json.decode(response.body)['items'] as List;
-      List<Map<String, dynamic>> adminDetails = [];
+        List<Map<String, dynamic>> adminProfiles = [];
+        for (var admin in joinedAdmins) {
+          final userId = admin['userid'];
+          final userResponse = await http.get(
+            Uri.parse('$baseUrl/api/collections/users/records/$userId?fields=firstname,avatar,collectionId'),
+          );
 
-      // Fetch detailed profile for each admin
-      for (var admin in joinedAdmins) {
-        final userResponse = await http.get(
-          Uri.parse('$baseUrl/api/collections/users/records/${admin['userid']}?fields=id,firstname,lastname,avatar,bio,collectionId'),
-        );
-
-        if (userResponse.statusCode == 200) {
-          final userData = json.decode(userResponse.body);
-          adminDetails.add({
-            ...userData,
-            'joinedId': admin['id'],
-            'userid': admin['userid'],
-            'avatarUrl': userData['avatar'] != null
-                ? '$baseUrl/api/files/${userData['collectionId']}/${userData['id']}/${userData['avatar']}'
-                : null,
-          });
+          if (userResponse.statusCode == 200) {
+            final userData = json.decode(userResponse.body);
+            adminProfiles.add({
+              'userid': userId,
+              'firstname': userData['firstname'],
+              'avatar': userData['avatar'],
+              'collectionId': userData['collectionId'],
+              'joinedId': admin['id'],
+            });
+          }
         }
-      }
 
-      setState(() {
-        adminList = adminDetails;
-        filteredAdmins = List.from(adminDetails);
-        isLoading = false;
-      });
+        setState(() {
+          admins = adminProfiles;
+          filteredAdmins = List.from(admins);
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        error = 'Failed to load admin list';
-        isLoading = false;
-      });
+      print('Error fetching admins: $e');
+      setState(() => isLoading = false);
     }
   }
 
   void _filterAdmins(String query) {
     setState(() {
-      filteredAdmins = adminList.where((admin) {
-        final name = '${admin['firstname']} ${admin['lastname']}'.toLowerCase();
-        final userId = admin['userid'].toString().toLowerCase();
-        final searchQuery = query.toLowerCase();
-        return name.contains(searchQuery) || userId.contains(searchQuery);
+      filteredAdmins = admins.where((admin) {
+        final name = (admin['firstname'] ?? '').toLowerCase();
+        final userId = (admin['userid'] ?? '').toLowerCase();
+        return name.contains(query.toLowerCase()) || userId.contains(query.toLowerCase());
       }).toList();
     });
   }
 
-  Future<void> _dismissSelectedAdmins() async {
+  Future<void> _dismissAdmins() async {
     if (selectedAdminIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please select at least one admin to dismiss'),
-          backgroundColor: Colors.orange,
-        ),
+        SnackBar(content: Text('Please select at least one admin')),
       );
       return;
     }
 
     try {
-      // Show loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Dismissing admins...'),
-            ],
+        builder: (context) => Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Dismissing admins...'),
+                ],
+              ),
+            ),
           ),
         ),
       );
 
-      // Process each selected admin
       for (String adminId in selectedAdminIds) {
-        final admin = adminList.firstWhere((a) => a['userid'] == adminId);
-
-        final response = await http.patch(
-          Uri.parse('$baseUrl/api/collections/joined_users/records/${admin['joinedId']}'),
+        final adminRecord = admins.firstWhere((admin) => admin['userid'] == adminId);
+        await http.patch(
+          Uri.parse('$baseUrl/api/collections/joined_users/records/${adminRecord['joinedId']}'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({'admin_or_not': false}),
         );
-
-        if (response.statusCode != 200) {
-          throw Exception('Failed to dismiss admin: $adminId');
-        }
       }
 
-      // Close loading dialog and return to previous screen
-      Navigator.of(context)
-        ..pop() // Close loading dialog
-        ..pop(); // Return to previous screen
+      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); // Return to previous screen
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Successfully dismissed ${selectedAdminIds.length} admin(s)'),
+          content: Text('Admins dismissed successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -145,23 +129,34 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
       Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to dismiss admins. Please try again.'),
+          content: Text('Failed to dismiss admins'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  Widget _buildAdminCard(Map<String, dynamic> admin) {
-    return Card(
+  Widget _buildAdminTile(Map<String, dynamic> admin) {
+    final avatarUrl = admin['avatar'] != null
+        ? '$baseUrl/api/files/${admin['collectionId']}/${admin['userid']}/${admin['avatar']}'
+        : null;
+
+    return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: CheckboxListTile(
         value: selectedAdminIds.contains(admin['userid']),
-        onChanged: (bool? value) {
+        onChanged: (value) {
           setState(() {
             if (value == true) {
               selectedAdminIds.add(admin['userid']);
@@ -170,43 +165,37 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
             }
           });
         },
-        secondary: CircleAvatar(
-          radius: 25,
-          backgroundColor: Colors.grey[200],
-          backgroundImage: admin['avatarUrl'] != null
-              ? CachedNetworkImageProvider(admin['avatarUrl'])
-              : null,
-          child: admin['avatarUrl'] == null
-              ? Icon(Icons.person, color: Colors.grey[400])
-              : null,
+        secondary: ClipRRect(
+          borderRadius: BorderRadius.circular(25),
+          child: CachedNetworkImage(
+            imageUrl: avatarUrl ?? '',
+            width: 50,
+            height: 50,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: Colors.grey[200],
+              child: Icon(Icons.person, color: Colors.grey[400]),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey[200],
+              child: Icon(Icons.person, color: Colors.grey[400]),
+            ),
+          ),
         ),
         title: Text(
-          '${admin['firstname'] ?? ''} ${admin['lastname'] ?? ''}'.trim(),
+          admin['firstname'] ?? 'Unknown Admin',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'ID: ${admin['userid']}',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-            ),
-            if (admin['bio'] != null && admin['bio'].toString().isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  admin['bio'],
-                  style: TextStyle(fontSize: 13),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
+        subtitle: Text(
+          admin['userid'] ?? '',
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 14,
+          ),
         ),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
     );
   }
@@ -214,7 +203,7 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
@@ -232,53 +221,45 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
           Container(
             color: Colors.white,
             padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: TextField(
               controller: searchController,
               decoration: InputDecoration(
-                hintText: 'Search admins...',
-                prefixIcon: Icon(Icons.search, color: Colors.grey),
+                hintText: 'Search admins',
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                filled: true,
+                fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
-                filled: true,
-                fillColor: Colors.grey[100],
+                contentPadding: EdgeInsets.symmetric(horizontal: 16),
               ),
               onChanged: _filterAdmins,
             ),
           ),
-
-          // Admin list
           Expanded(
-            child: isLoading ? Center(
-              child: CircularProgressIndicator(),
-            ) : error != null ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(error!, style: TextStyle(color: Colors.red)),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _fetchAdmins,
-                    child: Text('Retry'),
-                  ),
-                ],
-              ),
-            ) : filteredAdmins.isEmpty ? Center(
+            child: isLoading
+                ? Center(child: CircularProgressIndicator())
+                : filteredAdmins.isEmpty
+                ? Center(
               child: Text(
-                searchController.text.isEmpty
-                    ? 'No admins found'
-                    : 'No matching admins found',
-                style: TextStyle(color: Colors.grey[600]),
+                'No admins found',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                ),
               ),
-            ) : ListView.builder(
+            )
+                : ListView.builder(
               padding: EdgeInsets.symmetric(vertical: 8),
               itemCount: filteredAdmins.length,
-              itemBuilder: (context, index) => _buildAdminCard(filteredAdmins[index]),
+              itemBuilder: (context, index) {
+                return _buildAdminTile(filteredAdmins[index]);
+              },
             ),
           ),
         ],
@@ -290,29 +271,27 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
               offset: Offset(0, -2),
-              blurRadius: 6,
             ),
           ],
         ),
         child: SafeArea(
           child: ElevatedButton(
-            onPressed: selectedAdminIds.isEmpty ? null : _dismissSelectedAdmins,
+            onPressed: _dismissAdmins,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               padding: EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              elevation: 0,
             ),
             child: Text(
-              selectedAdminIds.isEmpty
-                  ? 'Select Admins to Dismiss'
-                  : 'Dismiss ${selectedAdminIds.length} Admin${selectedAdminIds.length > 1 ? 's' : ''}',
+              'Dismiss ${selectedAdminIds.length} Admins',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ),
           ),

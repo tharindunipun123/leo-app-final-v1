@@ -91,7 +91,7 @@ class _SetAdminScreenState extends State<SetAdminScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Setting admins...'),
+                  Text('Setting admins and badges...'),
                 ],
               ),
             ),
@@ -99,12 +99,24 @@ class _SetAdminScreenState extends State<SetAdminScreen> {
         ),
       );
 
+      // Process each selected user
       for (String userId in selectedUserIds) {
+        // 1. Set user as admin
         final userRecord = users.firstWhere((user) => user['userid'] == userId);
         await http.patch(
           Uri.parse('$baseUrl/api/collections/joined_users/records/${userRecord['joinedId']}'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({'admin_or_not': true}),
+        );
+
+        // 2. Add badge record
+        await http.post(
+          Uri.parse('$baseUrl/api/collections/recieved_badges/records'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'userId': userId,
+            'batch_name': 'admin'
+          }),
         );
       }
 
@@ -113,15 +125,16 @@ class _SetAdminScreenState extends State<SetAdminScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Admins set successfully!'),
+          content: Text('Admins set and badges assigned successfully!'),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
+      print('Error setting admins and badges: $e');
       Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to set admins'),
+          content: Text('Failed to set admins and badges'),
           backgroundColor: Colors.red,
         ),
       );
@@ -282,7 +295,7 @@ class _SetAdminScreenState extends State<SetAdminScreen> {
           child: ElevatedButton(
             onPressed: _setAdmins,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: Colors.lightBlueAccent,
               padding: EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -293,6 +306,7 @@ class _SetAdminScreenState extends State<SetAdminScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
+                color: Colors.white
               ),
             ),
           ),

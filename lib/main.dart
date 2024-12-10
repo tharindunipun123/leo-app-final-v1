@@ -21,7 +21,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'ZEGOCLOUD Chat App',
-      theme: ThemeData(primarySwatch: Colors.blue),
+       theme: ThemeData(
+      primarySwatch: Colors.blue,
+      scaffoldBackgroundColor: Colors.white, // Ensures the background is white
+    ),
       home: SplashScreen(),
     );
   }
