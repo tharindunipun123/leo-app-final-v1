@@ -11,6 +11,7 @@ import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_aud
 import 'package:cached_network_image/cached_network_image.dart';
 import 'memberlist.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 // Project imports:
 import 'constants.dart';
@@ -36,6 +37,9 @@ class LivePage extends StatefulWidget {
 }
 
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
+  bool _showCopySuccess = false;
+  DateTime? _lastTapTime;
+  DateTime? _lastBottomSheetTime;
   late AnimationController _controller;
   late Animation<double> _glowAnimation;
   String? _onlineUserRecordId;
@@ -620,7 +624,19 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                     children: [
                       // Room Image
                       GestureDetector(
-                        onTap: () => _showBottomSheet(context, widget.roomID),
+                        onTap: () {
+                          // Add debounce logic
+                          final now = DateTime.now();
+                          if (_lastTapTime != null &&
+                              now.difference(_lastTapTime!) < const Duration(milliseconds: 500)) {
+                            // If tapped within 500ms, ignore this tap
+                            return;
+                          }
+                          _lastTapTime = now;
+
+                          // Show bottom sheet
+                          _showBottomSheet(context, widget.roomID);
+                        },
                         child: Container(
                           width: 30,
                           height: 30,
@@ -705,6 +721,16 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
 
   Future<void> _showBottomSheet(BuildContext context, String roomId) async {
+    // Prevent multiple bottom sheets
+    final now = DateTime.now();
+    if (_lastBottomSheetTime != null &&
+        now.difference(_lastBottomSheetTime!) < const Duration(milliseconds: 50)) {
+      return;
+    }
+    _lastBottomSheetTime = now;
+
+    if (!mounted) return;
+
     try {
       // Fetch the current userId from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -746,11 +772,15 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       // Check if the user is the room owner
       isRoomOwner = roomData['ownerId'] == currentUserId;
 
+      if (!mounted) return;
+
       // Show the bottom sheet
-      showModalBottomSheet(
+      await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
+        isDismissible: true,
+        enableDrag: true,
         builder: (context) {
           return Container(
             height: MediaQuery.of(context).size.height * 0.85,
@@ -778,7 +808,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         ),
                         Spacer(),
                         if (isRoomOwner)
-
                           IconButton(
                             icon: Icon(Icons.close),
                             onPressed: () => Navigator.pop(context),
@@ -832,19 +861,72 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                               ),
                               const SizedBox(height: 8),
                               // Room ID with copy icon
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Room ID: ${roomData['voiceRoom_id']}',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(Icons.copy, size: 16, color: Colors.grey[600]),
-                                ],
+                              // Room ID with copy icon
+                              // First, modify your Room ID section to use StatefulBuilder:
+                              // Inside your Room ID section in the bottom sheet:
+                              StatefulBuilder(
+                                builder: (BuildContext context, StateSetter setModalState) {  // Change setState to setModalState
+                                  return Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Room ID: ',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: roomData['voiceRoom_id'].toString()));
+                                              setModalState(() {  // Use setModalState instead of setState
+                                                _showCopySuccess = true;  // Use class variable
+                                              });
+                                              Future.delayed(Duration(seconds: 2), () {
+                                                if (mounted) {
+                                                  setModalState(() {  // Use setModalState
+                                                    _showCopySuccess = false;
+                                                  });
+                                                }
+                                              });
+                                            },
+                                            child: Row(
+                                              children: [
+                                                Text(
+                                                  '${roomData['voiceRoom_id']}',
+                                                  style: TextStyle(
+                                                    color: Colors.grey[600],
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Icon(
+                                                  Icons.copy,
+                                                  size: 16,
+                                                  color: Colors.blue,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (_showCopySuccess)  // Use class variable
+                                        Padding(
+                                          padding: EdgeInsets.only(top: 4),
+                                          child: Text(
+                                            'Copied to clipboard',
+                                            style: TextStyle(
+                                              color: Colors.green,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 24),
+                                    ],
+                                  );
+                                },
                               ),
                               const SizedBox(height: 24),
                               // Room Details Container
@@ -876,8 +958,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                               currentUserId: currentUserId,
                               isJoined: isUserJoined,
                             ),
-
-
                           ],
                         ),
                       ],

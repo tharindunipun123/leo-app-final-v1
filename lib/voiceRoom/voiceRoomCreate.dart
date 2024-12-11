@@ -60,14 +60,14 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         final items = data['items'] as List;
         setState(() {
           _tags = items.map((item) => item['tag_name'].toString()).toList();
-          setState(() {
-            _tags = items.map((item) => item['tag_name'].toString()).toList();
-          });
         });
       }
     } catch (e) {
       print('Error fetching tags: $e');
-      print('Error fetching tags: $e');
+      // Show error to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading tags: $e')),
+      );
     }
   }
 
@@ -585,7 +585,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
 
         // Find the Admin badge
         final adminBadge = badges.firstWhere(
-              (badge) => badge['badgeName'] == 'admin',
+              (badge) => badge['badgeName'] == 'owner',
           orElse: () => null,
         );
 
@@ -608,7 +608,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'userId': userId,
-          'batch_name': badgeName,
+          'batch_name': "owner",
         }),
       );
 
@@ -630,6 +630,11 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       return;
     }
 
+    if (_selectedLanguage == null || _selectedTag == null) {
+      _showErrorSnackBar('Please select both language and tag');
+      return;
+    }
+
     setState(() => isLoading = true);
     _formKey.currentState!.save();
 
@@ -644,14 +649,18 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
       final uri = Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records');
       final request = http.MultipartRequest('POST', uri);
 
+      // Print debug information
+      print('Selected Tag: $_selectedTag');
+      print('Selected Language: $_selectedLanguage');
+
       request.fields.addAll({
         'voice_room_name': _roomNameController.text,
         'voiceRoom_id': _roomIdController.text,
         'voiceRoom_country': _countryController.text,
         'team_moto': _mottoController.text,
-        'tag': _selectedTag ?? '',
+        'tags': _selectedTag!, // Changed from 'tag' to 'tags' to match API
         'ownerId': ownerId ?? '',
-        'language': _selectedLanguage ?? '',
+        'language': _selectedLanguage!,
       });
 
       if (groupPhoto != null) {
@@ -670,12 +679,15 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
+
+      // Print response for debugging
+      print('Response status: ${response.statusCode}');
+      print('Response body: $responseBody');
+
       final data = jsonDecode(responseBody);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Create received badge record for the user
         await _createReceivedBadge(ownerId!, 'Admin');
-
         _showSuccessSnackBar('Voice room created successfully!');
 
         final prefs = await SharedPreferences.getInstance();
@@ -699,6 +711,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
         throw Exception('Failed to create voice room: ${data['message']}');
       }
     } catch (e) {
+      print('Error in form submission: $e'); // Added for debugging
       _showErrorSnackBar('Error: $e');
     } finally {
       setState(() => isLoading = false);

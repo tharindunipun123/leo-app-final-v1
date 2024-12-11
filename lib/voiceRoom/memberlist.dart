@@ -211,57 +211,36 @@ class _MemberListScreenState extends State<MemberListScreen> {
         color: Colors.blue.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.person,
-                color: Colors.blue,
-                size: 20,
-              ),
-              SizedBox(width: 8),
-              Text(
-                'Room Owner',
-                style: TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(25),
-              child: CachedNetworkImage(
-                imageUrl: "$baseUrl/api/files/${ownerData!['collectionId']}/${ownerData!['id']}/${ownerData!['avatar']}",
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey[200],
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey[300],
-                  child: Icon(Icons.person, color: Colors.grey[400]),
-                ),
-              ),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(25),
+          child: CachedNetworkImage(
+            imageUrl: "$baseUrl/api/files/${ownerData!['collectionId']}/${ownerData!['id']}/${ownerData!['avatar']}",
+            width: 50,
+            height: 50,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: Colors.grey[200],
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
-            title: Text(
-              ownerData!['firstname'] ?? "Unknown",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              ownerData!['bio'] ?? "No bio available",
-              style: TextStyle(fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey[300],
+              child: Icon(Icons.person, color: Colors.grey[400],),
             ),
           ),
-        ],
+        ),
+        title: Text(
+          ownerData!['firstname'] ?? "Unknown",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          ownerData!['bio'] ?? "No bio available",
+          style: TextStyle(fontSize: 12),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Icon(Icons.person, color: Colors.amber,size: 35,),
       ),
     );
   }
@@ -294,7 +273,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                   ),
                 ),
               ),
-              if (widget.currentUserId == ownerId || adminIds.contains(widget.currentUserId))
+              if (widget.currentUserId == ownerId)
                 IconButton(
                   icon: Icon(Icons.settings),
                   onPressed: _showSettingsDialog,
@@ -379,8 +358,6 @@ class _MemberListScreenState extends State<MemberListScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (!isAdmin)
-                          Icon(Icons.person, color: Colors.amber),
                         if ((widget.currentUserId == ownerId ||
                             (adminIds.contains(widget.currentUserId) && !isAdmin)) &&
                             widget.currentUserId != user['id'])

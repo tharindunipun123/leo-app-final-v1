@@ -57,7 +57,7 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
-
+  bool _isInitialMineLoad = true;
   String? _selectedCountry;
   bool _showCountryDialog = false;
   TextEditingController _countrySearchController = TextEditingController();
@@ -67,6 +67,8 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
   late TabController _tabController;
   final List<String> _tabs = ["Discover", "Mine"];
+  List<VoiceRoom> _allVoiceRooms = []; // For discover tab
+  List<VoiceRoom> _myVoiceRooms = []; // For mine tab (created + joined)
   List<VoiceRoom> _voiceRooms = [];
   String? _userId;
   String? _username;
@@ -82,7 +84,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     {'name': 'Australia', 'flag': 'https://flagcdn.com/w320/au.png'},
     {'name': 'Albania', 'flag': 'https://flagcdn.com/w320/al.png'},
     {'name': 'India', 'flag': 'https://flagcdn.com/w320/in.png'},
-    {'name': 'Pakistan', 'flag': 'https://flagcdn.com/w320/pk.png'},
+    {'name': 'Kuwait', 'flag': 'https://flagcdn.com/w320/kw.png'},
     {'name': 'Bangladesh', 'flag': 'https://flagcdn.com/w320/bd.png'},
   ];
 
@@ -114,6 +116,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(_handleTabChange);
     _loadUserData();
     _fetchMineVoiceRooms();
     _fetchVoiceRooms();
@@ -126,6 +129,14 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     setState(() {
       _searchQuery = _searchController.text.toLowerCase();
     });
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index == 1) {  // Mine tab
+      _fetchMineVoiceRooms();
+    } else {  // Discover tab
+      _fetchVoiceRooms();
+    }
   }
 
   List<VoiceRoom> get filteredRoomsByCountry {
@@ -188,7 +199,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         final data = json.decode(response.body);
         final items = data['items'] as List;
         setState(() {
-          _voiceRooms = items.map((item) => VoiceRoom.fromJson(item)).toList();
+          _allVoiceRooms = items.map((item) => VoiceRoom.fromJson(item)).toList();
           _isLoading = false;
         });
       } else {
@@ -200,6 +211,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }
   }
 
+
   Future<void> _fetchMineVoiceRooms() async {
     try {
       setState(() => _isLoading = true);
@@ -207,69 +219,124 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId');
 
+      print('Debug: Fetching rooms for userId: $userId');
+
       if (userId == null) {
         setState(() => _isLoading = false);
         return;
       }
 
-      // Fetch rooms created by the user
+      // 1. First fetch self-created rooms
       final createdResponse = await http.get(
         Uri.parse(
-          'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")',
+            'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(ownerId="$userId")'
         ),
       );
 
-      // Fetch rooms joined by the user
+      // 2. Then fetch joined rooms list
       final joinedResponse = await http.get(
         Uri.parse(
-          'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(user_id="$userId")',
+            'http://145.223.21.62:8090/api/collections/joined_users/records?filter=(userid="$userId")'
         ),
       );
 
-      if (createdResponse.statusCode == 200 && joinedResponse.statusCode == 200) {
-        final createdRoomsData = json.decode(createdResponse.body);
-        final joinedRoomsData = json.decode(joinedResponse.body);
+      print('Debug: Joined rooms API response: ${joinedResponse.body}');
 
+      if (createdResponse.statusCode == 200 && joinedResponse.statusCode == 200) {
+        // Parse created rooms
+        final createdRoomsData = json.decode(createdResponse.body);
         final createdRooms = (createdRoomsData['items'] as List)
             .map((item) => VoiceRoom.fromJson(item))
             .toList();
 
-        final joinedRoomsIds = (joinedRoomsData['items'] as List)
-            .map((item) => item['voice_room_id'] as String)
-            .toSet();
+        print('Debug: Found ${createdRooms.length} created rooms');
 
-        final joinedRooms = await Future.wait(
-          joinedRoomsIds.map((roomId) async {
-            final roomResponse = await http.get(
-              Uri.parse(
-                'http://145.223.21.62:8090/api/collections/voiceRooms/records/$roomId',
-              ),
-            );
+        // Parse joined rooms data
+        final joinedRoomsData = json.decode(joinedResponse.body);
+        final joinedList = joinedRoomsData['items'] as List;
+        print('Debug: Found ${joinedList.length} joined room records');
 
-            if (roomResponse.statusCode == 200) {
-              final roomData = json.decode(roomResponse.body);
-              return VoiceRoom.fromJson(roomData);
+        // Fetch voice room details for each joined room
+        List<VoiceRoom> joinedRooms = [];
+        for (var joinedRoom in joinedList) {
+          String voiceRoomId = joinedRoom['voice_room_id'];
+          print('Debug: Fetching details for joined room ID: $voiceRoomId');
+
+          // Fetch the actual room details
+          final roomResponse = await http.get(
+            Uri.parse(
+                'http://145.223.21.62:8090/api/collections/voiceRooms/records?filter=(id="$voiceRoomId")'
+            ),
+          );
+
+          if (roomResponse.statusCode == 200) {
+            final roomData = json.decode(roomResponse.body);
+            if (roomData['items'] != null && roomData['items'].isNotEmpty) {
+              final room = VoiceRoom.fromJson(roomData['items'][0]);
+              joinedRooms.add(room);
+              print('Debug: Successfully added joined room: ${room.voiceRoomName}');
             }
-            return null;
-          }),
-        );
+          }
+        }
 
+        // Combine both lists
         setState(() {
-          _voiceRooms = [
+          _myVoiceRooms = [
             ...createdRooms,
-            ...joinedRooms.where((room) => room != null).cast<VoiceRoom>(),
+            ...joinedRooms,
           ];
+          print('Debug: Total rooms in mine tab: ${_myVoiceRooms.length}');
           _isLoading = false;
         });
-      } else {
-        setState(() => _isLoading = false);
       }
     } catch (e) {
-      print('Error fetching mine voice rooms: $e');
+      print('Debug: Error in _fetchMineVoiceRooms: $e');
       setState(() => _isLoading = false);
     }
   }
 
+  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+
+      if (userId == null) {
+        print('Debug: userId is null');
+        return false;
+      }
+
+      print('Debug: Checking removal status for userId: $userId and voiceRoomId: $voiceRoomId');
+
+      // Using PocketBase's list filter syntax
+      final encodedFilter = Uri.encodeComponent('user_id="$userId" && voice_room_id="$voiceRoomId"');
+      final response = await http.get(
+        Uri.parse(
+            'http://145.223.21.62:8090/api/collections/removed_users/records?filter=($encodedFilter)'
+        ),
+      );
+
+      print('Debug: API Response Status Code: ${response.statusCode}');
+      print('Debug: API Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List;
+        final isRemoved = items.isNotEmpty;
+
+        print('Debug: Found ${items.length} removal records');
+        print('Debug: User removed status: $isRemoved');
+
+        return isRemoved;
+      }
+
+      print('Debug: API call failed with status code: ${response.statusCode}');
+      return false;
+
+    } catch (e) {
+      print('Debug: Error checking if user is removed: $e');
+      return false;
+    }
+  }
 
   Future<bool> _checkExistingRoom() async {
     try {
@@ -313,6 +380,8 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       );
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -543,11 +612,30 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       return Center(child: CircularProgressIndicator(color: Colors.blue));
     }
 
-    final roomsToShow = isDiscoverTab
-        ? filteredRoomsByCountry
-        : _voiceRooms.where((room) {
-      return room.ownerId == _userId; // Show only created rooms for now
-    }).toList();
+    List<VoiceRoom> roomsToShow;
+
+    if (isDiscoverTab) {
+      // Show all rooms in discover tab
+      roomsToShow = _allVoiceRooms;
+
+      // Apply country filter if selected
+      if (_selectedCountry != null) {
+        roomsToShow = roomsToShow.where((room) {
+          return room.voiceRoomCountry.toLowerCase() == _selectedCountry!.toLowerCase();
+        }).toList();
+      }
+    } else {
+      // Show mine and joined rooms in Mine tab
+      roomsToShow = _myVoiceRooms;
+    }
+
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      roomsToShow = roomsToShow.where((room) {
+        return room.voiceRoomName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            room.voiceRoomId.toString().contains(_searchQuery);
+      }).toList();
+    }
 
     if (roomsToShow.isEmpty) {
       return Center(
@@ -561,10 +649,12 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     return ListView.builder(
       padding: EdgeInsets.all(16),
       itemCount: roomsToShow.length,
-      itemBuilder: (context, index) => _buildRoomCard(roomsToShow[index]),
+      itemBuilder: (context, index) {
+        final room = roomsToShow[index];
+        return _buildRoomCard(room);
+      },
     );
   }
-
 
   String _getEmptyMessage(bool isDiscoverTab) {
     if (isDiscoverTab) {
@@ -1000,14 +1090,14 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: InkWell(
-        onTap: () async {
-          final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
-          if (isRemoved) {
-            _showRemovalAlert();
-          } else {
-            _navigateToLivePage(room);
-          }
-        },
+          onTap: () async {
+            final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
+            if (isRemoved) {
+              _showRemovalAlert();
+            } else {
+              _navigateToLivePage(room);
+            }
+          },
         child: Card(
           elevation: 2,
           color: Colors.white70,
@@ -1215,43 +1305,79 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
 // Helper Methods
 
-  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
-    final String userId = "CURRENT_USER_ID"; // Replace with the actual user ID (as a String).
-
-    try {
-      final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/removed_users/records/$voiceRoomId?fields=user_id,voice_room_id'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['user_id'] == userId && data['voice_room_id'] == voiceRoomId;
-      }
-    } catch (e) {
-      print('Error checking removal status: $e');
-    }
-    return false;
-  }
-
-
   void _showRemovalAlert() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Access Denied'),
-        content: Text(
-          'You cannot join this room because the room admins have removed you.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('OK'),
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        ],
-      ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.2),
+                  spreadRadius: 4,
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.block,
+                  color: Colors.red,
+                  size: 48,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Access Denied',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'You have been removed from this voice room and cannot rejoin.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.lightBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(fontSize: 16,color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
+
+
 
 
   //
@@ -1322,6 +1448,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
     _fetchTagPhotos();

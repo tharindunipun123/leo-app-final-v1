@@ -63,35 +63,52 @@ class _BadgesScreenState extends State<BadgesScreen> {
 
   Future<void> fetchUserBadges() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/collections/recieved_badges/records'),
-        headers: {'filter': 'userId="$userId"'},
+      // First fetch received badges for the specific user
+      final receivedBadgesResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/recieved_badges/records?filter=(userId="$userId")'),
       );
 
-      if (response.statusCode == 200) {
-        final receivedBadges = json.decode(response.body)['items'];
+      if (receivedBadgesResponse.statusCode == 200) {
+        final receivedBadges = json.decode(receivedBadgesResponse.body)['items'] as List;
         List<Map<String, dynamic>> badgesList = [];
 
-        for (var badge in receivedBadges) {
+        // Create a Set to track unique badge names
+        Set<String> processedBadgeNames = {};
+
+        for (var receivedBadge in receivedBadges) {
+          final badgeName = receivedBadge['batch_name'];
+
+          // Skip if we've already processed this badge name
+          if (processedBadgeNames.contains(badgeName)) continue;
+          processedBadgeNames.add(badgeName);
+
+          // Fetch badge details
           final badgeResponse = await http.get(
-            Uri.parse('$baseUrl/api/collections/badges/records'),
-            headers: {'filter': 'badgeName="${badge['batch_name']}"'},
+            Uri.parse('$baseUrl/api/collections/badges/records?filter=(badgeName="$badgeName")'),
           );
 
           if (badgeResponse.statusCode == 200) {
-            var badgeData = json.decode(badgeResponse.body)['items'][0];
-            badgesList.add({
-              'id': badgeData['id'],
-              'collectionId': badgeData['collectionId'],
-              'badgePhoto': badgeData['badgePhoto'],
-              'badgeName': badgeData['badgeName'],
-            });
+            final badgeItems = json.decode(badgeResponse.body)['items'] as List;
+            if (badgeItems.isNotEmpty) {
+              final badgeData = badgeItems[0];
+              // Make sure badgePhoto exists and is not empty
+              if (badgeData['badgePhoto'] != null && badgeData['badgePhoto'].toString().isNotEmpty) {
+                badgesList.add({
+                  'id': badgeData['id'],
+                  'collectionId': badgeData['collectionId'],
+                  'badgePhoto': badgeData['badgePhoto'],
+                  'badgeName': badgeData['badgeName'],
+                });
+              }
+            }
           }
         }
 
-        setState(() {
-          badges = badgesList;
-        });
+        if (mounted) {
+          setState(() {
+            badges = badgesList;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching badges: $e');

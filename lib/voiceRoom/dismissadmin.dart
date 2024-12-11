@@ -30,37 +30,51 @@ class _DismissAdminScreenState extends State<DismissAdminScreen> {
     try {
       setState(() => isLoading = true);
 
+      // Correct PocketBase filter syntax
       final response = await http.get(
-        Uri.parse('$baseUrl/api/collections/joined_users/records?filter=(voice_room_id="${widget.voiceRoomId}" && admin_or_not=true)'),
+        Uri.parse('$baseUrl/api/collections/joined_users/records?filter=(voice_room_id="${widget.voiceRoomId}")'),
       );
 
       if (response.statusCode == 200) {
-        final joinedAdmins = json.decode(response.body)['items'] as List;
+        final joinedData = json.decode(response.body)['items'] as List;
+        // Filter admins from the response
+        final joinedAdmins = joinedData.where((user) => user['admin_or_not'] == true).toList();
 
-        List<Map<String, dynamic>> adminProfiles = [];
-        for (var admin in joinedAdmins) {
-          final userId = admin['userid'];
-          final userResponse = await http.get(
-            Uri.parse('$baseUrl/api/collections/users/records/$userId?fields=firstname,avatar,collectionId'),
-          );
+        final userFutures = joinedAdmins.map((admin) async {
+          try {
+            final userResponse = await http.get(
+              Uri.parse('$baseUrl/api/collections/users/records/${admin['userid']}'),
+            );
 
-          if (userResponse.statusCode == 200) {
-            final userData = json.decode(userResponse.body);
-            adminProfiles.add({
-              'userid': userId,
-              'firstname': userData['firstname'],
-              'avatar': userData['avatar'],
-              'collectionId': userData['collectionId'],
-              'joinedId': admin['id'],
-            });
+            if (userResponse.statusCode == 200) {
+              final userData = json.decode(userResponse.body);
+              return {
+                'userid': admin['userid'],
+                'firstname': userData['firstname'],
+                'avatar': userData['avatar'],
+                'collectionId': userData['collectionId'],
+                'joinedId': admin['id'],
+              };
+            }
+          } catch (e) {
+            print('Error fetching user ${admin['userid']}: $e');
           }
-        }
+          return null;
+        }).toList();
+
+        final adminProfiles = (await Future.wait(userFutures))
+            .where((profile) => profile != null)
+            .cast<Map<String, dynamic>>()
+            .toList();
 
         setState(() {
           admins = adminProfiles;
-          filteredAdmins = List.from(admins);
+          filteredAdmins = List.from(adminProfiles);
           isLoading = false;
         });
+      } else {
+        print('Failed to fetch admins: ${response.statusCode}');
+        setState(() => isLoading = false);
       }
     } catch (e) {
       print('Error fetching admins: $e');

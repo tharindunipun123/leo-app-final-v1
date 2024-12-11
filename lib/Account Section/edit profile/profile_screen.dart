@@ -146,33 +146,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
   Future<void> _fetchUserBadges() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/collections/recieved_badges/records'),
-        headers: {'filter': 'userId="$userId"'},
+      // First fetch received badges for the specific user
+      final receivedBadgesResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/recieved_badges/records?filter=(userId="$userId")'),
       );
 
-      if (response.statusCode == 200) {
-        final receivedBadges = json.decode(response.body)['items'];
+      if (receivedBadgesResponse.statusCode == 200) {
+        final receivedBadges = json.decode(receivedBadgesResponse.body)['items'] as List;
         List<Map<String, dynamic>> badgesList = [];
 
-        for (var badge in receivedBadges) {
+        // Create a Set to track unique badge names
+        Set<String> processedBadgeNames = {};
+
+        for (var receivedBadge in receivedBadges) {
+          final badgeName = receivedBadge['batch_name'];
+
+          // Skip if we've already processed this badge name
+          if (processedBadgeNames.contains(badgeName)) continue;
+          processedBadgeNames.add(badgeName);
+
+          // Fetch badge details
           final badgeResponse = await http.get(
-            Uri.parse('$baseUrl/api/collections/badges/records'),
-            headers: {'filter': 'badgeName="${badge['batch_name']}"'},
+            Uri.parse('$baseUrl/api/collections/badges/records?filter=(badgeName="$badgeName")'),
           );
 
           if (badgeResponse.statusCode == 200) {
-            var badgeData = json.decode(badgeResponse.body)['items'][0];
-            badgesList.add({
-              'id': badgeData['id'],
-              'collectionId': badgeData['collectionId'],
-              'badgePhoto': badgeData['badgePhoto'],
-            });
+            final badgeItems = json.decode(badgeResponse.body)['items'] as List;
+            if (badgeItems.isNotEmpty) {
+              final badgeData = badgeItems[0];
+              // Make sure badgePhoto exists and is not empty
+              if (badgeData['badgePhoto'] != null && badgeData['badgePhoto'].toString().isNotEmpty) {
+                badgesList.add({
+                  'id': badgeData['id'],
+                  'collectionId': badgeData['collectionId'],
+                  'badgePhoto': badgeData['badgePhoto'],
+                  'badgeName': badgeData['badgeName'],
+                });
+              }
+            }
           }
         }
-        setState(() {
-          badges = badgesList;
-        });
+
+        if (mounted) {
+          setState(() {
+            badges = badgesList;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching badges: $e');
@@ -296,7 +315,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _sectionHeader('Badges', 'badges'),
         SizedBox(height: 10.w),
         SizedBox(
-          height: 75.w,
+          height: 100.w,
           width: double.infinity,
           child: badges == null
               ? const Center(child: CircularProgressIndicator())
@@ -308,15 +327,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
             separatorBuilder: (_, __) => SizedBox(width: 20.w),
             itemBuilder: (context, index) {
               final badge = badges![index];
-              return GiftItem(
-                icon: '$baseUrl/api/files/${badge['collectionId']}/${badge['id']}/${badge['badgePhoto']}',
-                text: '',
+              final imageUrl = '$baseUrl/api/files/${badge['collectionId']}/${badge['id']}/${badge['badgePhoto']}';
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 50.w,
+                    height: 50.w,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _buildBadgeImage(imageUrl),
+                  ),
+                  SizedBox(height: 5.w),
+                  Container(
+                    width: 60.w,
+                    child: Text(
+                      badge['badgeName'] ?? '',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10.sp,
+                        color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               );
             },
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildBadgeImage(String imageUrl) {
+    final extension = imageUrl.split('.').last.toLowerCase();
+
+    if (extension == 'svg') {
+      return SvgPicture.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        placeholderBuilder: (context) => Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    } else {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 50.w,
+            height: 50.w,
+            color: Colors.grey[300],
+            child: Icon(Icons.broken_image, size: 25.w),
+          );
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                  loadingProgress.expectedTotalBytes!
+                  : null,
+            ),
+          );
+        },
+      );
+    }
   }
 
   // Widget _buildVoiceRoomsSection() {
