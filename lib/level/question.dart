@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-class question extends StatefulWidget {
-  const question({super.key});
+class questionlevel extends StatefulWidget {
+  const questionlevel({super.key});
 
   @override
-  State<question> createState() => _questionState();
+  State<questionlevel> createState() => _questionlevelState();
 }
 
-class _questionState extends State<question> {
+class _questionlevelState extends State<questionlevel> {
   @override
   Widget build(BuildContext context) {
        final width = MediaQuery.of(context).size.width;

@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:leo_app_01/Account%20Section/level/progressbar.dart';
-import 'package:leo_app_01/Account%20Section/level/question.dart';
-import 'package:leo_app_01/Account%20Section/level/statemanegemnt/fillcount.dart';
+import 'package:leo_app_01/level/progressbar.dart';
+import 'package:leo_app_01/level/question.dart';
+import 'package:leo_app_01/level/statemanegemnt/fillcount.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:provider/provider.dart';
 class RankingPagelevel extends StatefulWidget {
@@ -30,6 +31,36 @@ class _RankingPagelevelState extends State<RankingPagelevel> {
   List<String> imageUrls = []; // To hold the list of image URLs
   bool isLoading = true; // To show loading state
   String errorMessage = '';
+String profilepic='';
+final idFromOtherPage = "abc123"; // Replace with the actual ID you receive
+
+
+Future<void> fetchAndUpdateNobelCount() async {
+  try {
+    // Fetch user information
+    final user = await pb.collection('users').getFirstListItem(
+      'id="${widget.ID}"',
+    );
+    final avatar = user.data['avatar'].toString();
+
+    // Construct the full URL if avatar is not empty
+    if (avatar.isNotEmpty) {
+      profilepic = '${pb.baseUrl}/api/files/users/${user.id}/$avatar';
+    } else {
+      profilepic = ''; // Handle case where no avatar exists
+    }
+
+    print('User Avatar URL: $profilepic');
+
+    // Fetch all records for the user in the level_Timer collection (if needed)
+    // ...
+  } catch (e) {
+    print("Error fetching user data: $e");
+  }
+}
+
+
+
 
   Future<void> fetchAndAddImageUrls(String userId) async {
     try {
@@ -75,11 +106,20 @@ class _RankingPagelevelState extends State<RankingPagelevel> {
       return [];
     }
   }
+String generateFixedLengthId(int length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  final random = Random();
+  return List.generate(length, (index) => chars[random.nextInt(chars.length)]).join();
+}
 
-
-Future<void> sendTextToPrivilegeCollection(final timemin) async {
+Future<void> sendTextToPrivilegeCollection(final timemin,String specificId) async {
   String nameitem;
+  final fillcount = fillCount.fillCount;
 
+if (specificId.length != 15) {
+    print('Error: The provided ID must be exactly 15 characters long.');
+    return;
+  }
 
   // Determine the nameitem based on nobelcount
    if (timemin >= 0 && timemin < 210) {
@@ -98,94 +138,60 @@ Future<void> sendTextToPrivilegeCollection(final timemin) async {
   }
 
 
-try {
-  final existingEntry = await pb.collection('Level').getFirstListItem(
-    'UserID = "${widget.ID}" && name = "$nameitem"',
-  );
-
-  if (existingEntry != null) {
-    print('Entry already exists for UserID: ${widget.ID} and name: $nameitem');
-    return;
-  }
-} catch (e) {
-  // Handle the case where no entry exists (404 Not Found)
-  if (!e.toString().contains("404")) {
-    print('Error checking for existing entry: $e');
-    return;
-  }
-}
 
 
-  // Define the body for the request
-  final Map<String, String> body = {
-    'UserID': widget.ID.toString(),
-    'name': nameitem,
-    'badge': '',
-    'frame': '',
-    'legacy': '',
-  };
-
-  // Add URLs dynamically based on nameitem
-  switch (nameitem) {
-    case "Bronve":
-      body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/a5rkdnty7bobzil/br0_JOVckwzdAz.png?token=";
-      body['frame'] = 'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/585esvwsyw2u53n/bframe_AJRKcd5iAi.png?token=';
-     body['legacy']= "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2kuw8gd/bronze_rhZJjww6V0.png?token=";
-      
-      break;
-    case "silver":
-     
-  body['badge'] ="http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9knou40t8xgcu49/s05cGnQKvIfn_SCc3NIdXS4.png?token=";
-  body['frame'] ='http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/585esvwsyw2u53n/sframe_cwENVGvfMl.png?token=';
-  body['legacy']=
-     'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2kuw8gd/silver_Pz8UaLptW9.png?token=';
- 
-     
-      break;
-    case "gold":
-    
-      body['badge'] ="http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/xxbuxvnt9afq1y4/g0VDYitUJO3p_jTu5x317OJ.png?token=";
-  body['frame'] ='http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/585esvwsyw2u53n/sframe_cwENVGvfMl.png?token=';
-  body['legacy']=
-      'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2kuw8gd/silver_Pz8UaLptW9.png?token=';
-  
-    
-    
-    
-      break;
-    case "platinum":
-     
-       body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/l2z2sjy2c9djo0o/p136fs73IbwH_4eGaSdu5rO.png?token=";
-  body['frame'] = 'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/585esvwsyw2u53n/pframe_JUI9lvwSEo.png?token=';
-body['legacy'] = 'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2kuw8gd/platinum_IlpEQ1SpSS.png?token=';
-  
-     
-     
-     
-      break;
- case "diamond":
-  
-  
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/fvwi1h25xvjvsfh/dl0_HalDd8NQkS.png?token=";
-  body['frame'] ='http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/585esvwsyw2u53n/dframe_O3HPn1K2Jb.png?token=';
- body['legacy'] = 'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2kuw8gd/diamond_9yvM3gxc8L.png?token=';
- 
-  
-  
-    break;
-
-
-    // Add other cases for "Queen", "Duke", "King", "SKing", "SSKing"
-  }
-
-  // Send the data to PocketBase
   try {
-    final response = await pb.collection('Level').create(body: body);
-    print('Message sent to privilege collection: $response');
+    // Check if the specific ID exists
+    final existingEntry = await pb.collection('recieved_badges').getOne(specificId);
+
+    // Update the existing record
+    final updatedEntry = {
+      'batch_name': "${nameitem} level $fillcount",
+      'userId': widget.ID,
+    };
+
+    await pb.collection('recieved_badges').update(specificId, body: updatedEntry);
+    print('Updated existing entry in received_badges: $updatedEntry');
   } catch (error) {
-    print('Error sending message to privilege collection: $error');
+    // Handle the case where the record doesn't exist (404)
+    if (error.toString().contains("404")) {
+      print('Record not found, creating a new entry.');
+
+      final newEntry = {
+        'batch_name': "${nameitem} level $fillcount",
+        'userId': widget.ID,
+        'id': specificId, // Use the same specific ID
+      };
+
+      await pb.collection('recieved_badges').create(body: newEntry);
+      print('Created new entry in received_badges: $newEntry');
+    } else {
+      print('Error updating or creating entry in received_badges: $error');
+    }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -271,7 +277,7 @@ body['legacy'] = 'http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/butw0x7a2k
       first = const Color.fromARGB(255, 188, 172, 216);
       second = const Color.fromARGB(255, 151, 144, 210);
     }
-  sendTextToPrivilegeCollection(timemin);  
+  sendTextToPrivilegeCollection(timemin,"123456789012345");  
   }
 late Timer _timer;
 
@@ -282,6 +288,7 @@ late Timer _timer;
     _timer = Timer.periodic(Duration(seconds: 2), (Timer timer) {
       setState(() {}); // Trigger a rebuild
     });
+    fetchAndUpdateNobelCount();
   }
 
   @override
@@ -324,10 +331,15 @@ print("fill count  $fillcount");
                     Padding(
                       padding:
                           EdgeInsets.only(top: height / 60, left: width / 30),
-                      child: Icon(
-                        Icons.arrow_back_ios,
-                        size: width / 25,
-                        color: Colors.white,
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pop();
+                        },
+                        child: Icon(
+                          Icons.arrow_back_ios,
+                          size: width / 25,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     Padding(
@@ -337,7 +349,7 @@ print("fill count  $fillcount");
                         onTap: () {
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (context) {
-                              return question();
+                              return questionlevel();
                             },
                           ));
                         },
@@ -379,7 +391,7 @@ print("fill count  $fillcount");
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 image: DecorationImage(
-                                  image: AssetImage("assetss/images/User.jpg"),
+                                  image : NetworkImage(profilepic),
                                   fit: BoxFit.cover,
                                 ),
                               ),
@@ -578,9 +590,9 @@ print("fill count  $fillcount");
                                     ),
                                   ),
                                 ),
-                                SizedBox(
-                                  height: height / 60,
-                                ),
+                               
+                               
+                               
                                 Expanded(
                                   flex: 2,
                                   child: Container(
@@ -652,7 +664,7 @@ print("fill count  $fillcount");
                                                   Navigator.of(context)
                                                       .push(MaterialPageRoute(
                                                     builder: (context) {
-                                                      return question();
+                                                      return questionlevel();
                                                     },
                                                   ));
                                                 },

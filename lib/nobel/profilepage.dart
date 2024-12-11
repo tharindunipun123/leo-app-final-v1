@@ -2,9 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:leo_app_01/Account%20Section/level/question.dart';
-import 'package:leo_app_01/Account%20Section/nobel/nobelcart.dart';
-import 'package:leo_app_01/Account%20Section/nobel/rankingpage.dart';
+import 'package:leo_app_01/nobel/nobelcart.dart';
+import 'package:leo_app_01/nobel/questionmark.dart';
+import 'package:leo_app_01/nobel/rankingpage.dart';
 import 'package:lottie/lottie.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:pocketbase/pocketbase.dart';
@@ -54,63 +54,97 @@ class _profilepageState extends State<profilepage> {
     setupRealTimeSubscription();
     updateCounted();
   }
+Future<void> fetchAndUpdateNobelCount() async {
+  try {
+    // Fetch user information
+    final user = await pb.collection('users').getFirstListItem(
+          'id="${widget.ID}"',
+        );
 
-  Future<void> fetchAndUpdateNobelCount() async {
-    try {
-      // Fetch user information
-      final user = await pb.collection('users').getFirstListItem(
-            'id="${widget.ID}"',
-          );
+    firstName = user.data['firstname'].toString();
+    print('User First Name: $firstName');
 
-      firstName = user.data['firstname'].toString(); // Fetch the first name
-      print('User First Name: $firstName');
+    // Fetch gift records for this user as sender
+    final giftResult =
+        await pb.collection('sending_recieving_gifts').getFullList(
+              filter: 'sender_user_id="${widget.ID}"',
+            );
 
-      // Fetch the user's nobel_count
-
-      // Fetch gift counts for this user as sender
-      final giftResult =
-          await pb.collection('sending_recieving_gifts').getFullList(
-                filter: 'sender_user_id="${widget.ID}"',
-              );
-
-      // Check if no gifts exist
-      if (giftResult.isEmpty) {
-        print('No gifts found for user with ID: ${widget.ID}');
-              if (mounted) {
-
-        setState(() {
-          isLoading = false;
-        });
-              }
-        return;
-      }
-
-      // Sum up the gift counts
-      int totalGiftCount = giftResult.fold(0, (sum, item) {
-        final giftCount = int.tryParse(item.data['gift_count'].toString()) ?? 0;
-        return sum + giftCount;
-      });
-
-      // Update the total Nobel count
+    // Check if no gifts exist
+    if (giftResult.isEmpty) {
+      print('No gifts found for user with ID: ${widget.ID}');
       if (mounted) {
         setState(() {
-          nobelcount = totalGiftCount;
           isLoading = false;
         });
       }
-      print('Total Gift Count: $totalGiftCount');
-      print('Updated Nobel Count: $nobelcount');
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          errorMessage = 'Failed to load data: $error';
-          isLoading = false;
-        });
-      }
-      print('Error fetching data: $error');
+      return;
     }
-    sendTextToPrivilegeCollection();
+
+    // Group gifts by `giftname`
+    final Map<String, int> giftNameCounts = {};
+
+    for (var item in giftResult) {
+      final giftName = item.data['giftname'].toString();
+      final giftCount = int.tryParse(item.data['gift_count'].toString()) ?? 0;
+
+      if (giftName.isNotEmpty) {
+        giftNameCounts[giftName] = (giftNameCounts[giftName] ?? 0) + giftCount;
+      }
+    }
+
+    // Calculate total Nobel count based on grouped gifts
+    int totalNobelCount = 0;
+print("gift$giftNameCounts");
+
+for (var entry in giftNameCounts.entries) {
+  final giftName = entry.key;
+  final groupCount = entry.value;
+
+  try {
+    // Fetch gift details from the `gifts` collection for the `giftname`
+    final gift = await pb.collection('gifts').getFirstListItem(
+          'giftname="$giftName"', // Ensure the field name matches the `gifts` collection
+        );
+
+    if (gift == null) {
+      print("No gift found for giftname: $giftName");
+      continue; // Skip this giftName if no corresponding record is found
+    }
+
+    final amount = int.tryParse(gift.data['diamond_amount'].toString()) ?? 0;
+
+    print("Gift: $giftName, Group Count: $groupCount, Amount: $amount");
+
+    // Multiply the group's count by its amount
+    totalNobelCount += groupCount * amount;
+  } catch (e) {
+    print("Error fetching gift details for giftname: $giftName. Error: $e");
   }
+}
+
+
+    // Update the total Nobel count
+    if (mounted) {
+      setState(() {
+        nobelcount = totalNobelCount;
+        isLoading = false;
+      });
+    }
+
+    print('Total Nobel Count: $totalNobelCount');
+  } catch (error) {
+    if (mounted) {
+      setState(() {
+        errorMessage = 'Failed to load data: $error';
+        isLoading = false;
+      });
+    }
+    print('Error fetching data: $error');
+  }
+  sendTextToPrivilegeCollection();
+}
+
 
   void setupRealTimeSubscription() {
     pb.collection('sending_recieving_gifts').subscribe('*', (e) {
@@ -128,7 +162,7 @@ Future<void> sendTextToPrivilegeCollection() async {
 
   // Determine the nameitem based on nobelcount
   if (500 <= nobelcount && nobelcount <= 1499) {
-    nameitem = "Pawn";
+    nameitem = "pawn";
   } else if (1499 < nobelcount && nobelcount <= 3999) {
     nameitem = "Rook";
   } else if (3999 < nobelcount && nobelcount <= 11999) {
@@ -149,108 +183,38 @@ Future<void> sendTextToPrivilegeCollection() async {
     print('Nobel count does not match any range.');
     return;
   }
-
 try {
-  final existingEntry = await pb.collection('privilege').getFirstListItem(
-    'UserID = "${widget.ID}" && name = "$nameitem"',
+  // Check if the user already has an entry
+  final existingEntry = await pb.collection('recieved_badges').getFirstListItem(
+    'userId = "${widget.ID}"',
   );
 
   if (existingEntry != null) {
-    print('Entry already exists for UserID: ${widget.ID} and name: $nameitem');
-    return;
+    print('Existing Entry Found: $existingEntry');
+
+    // Update the existing entry with the new privilege name
+    final updatedEntry = {
+      'batch_name': nameitem,
+      'userId': widget.ID,
+    };
+
+    await pb.collection('recieved_badges').update(existingEntry.id, body: updatedEntry);
+    print('Updated existing entry in received_badges: $updatedEntry');
+  } else {
+    print('No existing entry found. Creating a new one.');
+
+    // Create a new entry in received_badges
+    final newEntry = {
+      'batch_name': nameitem,
+      'userId': widget.ID,
+    };
+
+    await pb.collection('recieved_badges').create(body: newEntry);
+    print('Created new entry in received_badges: $newEntry');
   }
-} catch (e) {
-  // Handle the case where no entry exists (404 Not Found)
-  if (!e.toString().contains("404")) {
-    print('Error checking for existing entry: $e');
-    return;
-  }
+} catch (error) {
+  print('Error updating or creating entry in received_badges: $error');
 }
-
-
-  // Define the body for the request
-  final Map<String, String> body = {
-    'UserID': widget.ID,
-    'name': nameitem,
-    'frame': '',
-    'name_plate': '',
-    'badge': '',
-    'entry_effect': '',
-    'profile_card': '',
-  };
-
-  // Add URLs dynamically based on nameitem
-  switch (nameitem) {
-    case "Pawn":
-      body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/zlzeg3j4a9yoafw/pawn_noble_badge_dpMClKSb9p.PNG?token=";
-      body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/zlzeg3j4a9yoafw/pawn_noble_name_plate_nZASF7UNxh.PNG?token=";
-      break;
-    case "Rook":
-      body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/uf5nu5mw2v0smrm/rook_frame_NDP2cWQR3I.png?token=";
-      body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/uf5nu5mw2v0smrm/baron_wuwWQHTQ3f.png?token=";
-      body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/uf5nu5mw2v0smrm/rook_noble_badge_07KVD2z6dB.PNG?token=";
-      break;
-    case "Knight":
-      body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9o8tde3cqveuw2z/knight_frame_qEaj79eCIT.png?token=";
-      body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9o8tde3cqveuw2z/knight_noble_badge_name_LkYXJApSE6.PNG?token=";
-      body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9o8tde3cqveuw2z/knight_noble_badge_rnT7iv97pL.PNG?token=";
-      body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9o8tde3cqveuw2z/knight_fancy_plate_gtr1C3agVm.png?token=";
-      body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/9o8tde3cqveuw2z/knightcard_cwIhCGmYSF.png?token=";
-      break;
-    case "Bishop":
-      body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/wvs5dcwav28lyao/bishop_frame_J1ZbCRRMkT.png?token=";
-      body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/wvs5dcwav28lyao/bishop_noble_badge_name_5GmB9MYzo7.PNG?token=";
-      body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/wvs5dcwav28lyao/bishop_noble_badge_v9Anfyp7kE.PNG?token=";
-      body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/wvs5dcwav28lyao/bishop_fancy_plate_kUCrmfpMH3.png?token=";
-      body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/wvs5dcwav28lyao/bishopcard_XiTGMXiirQ.png?token=";
-      break;
- case "Queen":
-    body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/queen/frame_Queen.png?token=";
-    body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/queen/name_plate_Queen.png?token=";
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/queen/badge_Queen.png?token=";
-    body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/queen/entry_effect_Queen.png?token=";
-    body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/queen/profile_card_Queen.png?token=";
-    break;
-  case "Duke":
-    body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/duke/frame_Duke.png?token=";
-    body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/duke/name_plate_Duke.png?token=";
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/duke/badge_Duke.png?token=";
-    body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/duke/entry_effect_Duke.png?token=";
-    body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/duke/profile_card_Duke.png?token=";
-    break;
-  case "King":
-    body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/king/frame_King.png?token=";
-    body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/king/name_plate_King.png?token=";
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/king/badge_King.png?token=";
-    body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/king/entry_effect_King.png?token=";
-    body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/king/profile_card_King.png?token=";
-    break;
-  case "SKing":
-    body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/superking/frame_SKing.png?token=";
-    body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/superking/name_plate_SKing.png?token=";
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/superking/badge_SKing.png?token=";
-    body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/superking/entry_effect_SKing.png?token=";
-    body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/superking/profile_card_SKing.png?token=";
-    break;
-  case "SSKing":
-    body['frame'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/ultraking/frame_SSKing.png?token=";
-    body['name_plate'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/ultraking/name_plate_SSKing.png?token=";
-    body['badge'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/ultraking/badge_SSKing.png?token=";
-    body['entry_effect'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/ultraking/entry_effect_SSKing.png?token=";
-    body['profile_card'] = "http://145.223.21.62:8090/api/files/vnhwix61fv2fpio/ultraking/profile_card_SSKing.png?token=";
-    break;
-
-
-    // Add other cases for "Queen", "Duke", "King", "SKing", "SSKing"
-  }
-
-  // Send the data to PocketBase
-  try {
-    final response = await pb.collection('privilege').create(body: body);
-    print('Message sent to privilege collection: $response');
-  } catch (error) {
-    print('Error sending message to privilege collection: $error');
-  }
 }
 
   @override
