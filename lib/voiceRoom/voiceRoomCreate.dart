@@ -22,7 +22,7 @@ class _CreateVoiceRoomPageState extends State<CreateVoiceRoomPage> {
   static const cardColor = Color(0xFFFFFFFF); // White for cards
 
   List<String> _languages = [
-    'English', 'Sinhala', 'Tamil'
+    'English', 'සිංහල', 'Tamil'
   ];
   String? _selectedLanguage;
   List<String> _tags = [];

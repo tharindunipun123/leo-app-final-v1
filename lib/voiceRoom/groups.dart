@@ -295,7 +295,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     }
   }
 
-  Future<bool> _checkIfUserRemoved(int voiceRoomId) async {
+  Future<bool> _checkIfUserRemoved(String voiceRoomId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId');
@@ -1091,7 +1091,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: InkWell(
           onTap: () async {
-            final isRemoved = await _checkIfUserRemoved(room.voiceRoomId);
+            final isRemoved = await _checkIfUserRemoved(room.id);
             if (isRemoved) {
               _showRemovalAlert();
             } else {
