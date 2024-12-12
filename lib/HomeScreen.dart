@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ChatScreen1(),
         GroupsScreen(),
         GameScreen(),
-        AccountScreen(),
+        AccountScreen1(),
       ];
     });
   }

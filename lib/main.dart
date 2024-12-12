@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';  // Add this import
 import 'package:leo_app_01/StartScreen.dart';
 import 'package:leo_app_01/splash.dart';
 import 'package:zego_zimkit/zego_zimkit.dart';
@@ -14,18 +15,24 @@ void main() {
   runApp(MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'ZEGOCLOUD Chat App',
-       theme: ThemeData(
-      primarySwatch: Colors.blue,
-      scaffoldBackgroundColor: Colors.white, // Ensures the background is white
-    ),
-      home: SplashScreen(),
+    return ScreenUtilInit(
+      designSize: const Size(360, 690),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (_, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'ZEGOCLOUD Chat App',
+          theme: ThemeData(
+            primarySwatch: Colors.blue,
+            scaffoldBackgroundColor: Colors.white,
+          ),
+          home: SplashScreen(),
+        );
+      },
     );
   }
 }

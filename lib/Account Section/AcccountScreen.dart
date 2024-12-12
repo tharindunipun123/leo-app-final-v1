@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
-import 'package:leo_app_01/Account%20Section/ViewProfile.dart';
-import 'package:leo_app_01/Account%20Section/profile.dart';
-import 'package:leo_app_01/Account%20Section/profileUpdate.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:leo_app_01/level/rankingpage.dart';
-import 'package:leo_app_01/nobel/profilepage.dart';
-import 'package:leo_app_01/nobel/rankingpage.dart';
+import 'constants.dart';
+import 'edit profile/theme.dart';
+import 'edit profile/widgets/account_edit_tile.dart';
+import 'edit profile/widgets/back_button.dart';
+import 'edit profile/widgets/body_container.dart';
+import 'edit profile/widgets/text_with_arrow.dart';
 import 'wallet.dart';
+import '../level/rankingpage.dart';
+import '../nobel/profilepage.dart';
 import 'Myitems.dart';
-import 'package:leo_app_01/nobel/profilepage.dart';
-import 'invite friends/invite_screen.dart';
 import 'achievement/achievement_screen.dart';
+import 'invite friends/invite_screen.dart';
 import 'edit profile/main_profile.dart';
 
-
-class AccountScreen extends StatefulWidget {
-  const AccountScreen({Key? key}) : super(key: key);
+class AccountScreen1 extends StatefulWidget {
+  const AccountScreen1({super.key});
 
   @override
-  State<AccountScreen> createState() => _AccountScreenState();
+  State<AccountScreen1> createState() => _AccountScreen1State();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreen1State extends State<AccountScreen1> {
   Map<String, dynamic>? userData;
   bool isLoading = true;
   final String baseUrl = 'http://145.223.21.62:8090';
@@ -58,199 +59,146 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: <Widget>[
-          SliverAppBar(
-            expandedHeight: 50.0,
-            floating: false,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'My Account',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    colors: [Colors.blue[400]!, Colors.blue[800]!],
-                  ),
-                ),
-              ),
-            ),
+      appBar: AppBar(
+       // leading: const AppBarBackButton(),
+        centerTitle: true,
+        title: Text(
+          'My Account',
+          style: TextStyle(
+            fontSize: 16.sp,
+            color: darkModeEnabled ? kDarkTextColor : kTextColor,
           ),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              _buildProfileCard(context),
-              _buildFeatureCard(
-                context,
-                'Wallet',
-                FontAwesomeIcons.wallet,
-                    () => _navigateToWallet(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'Level',
-                FontAwesomeIcons.chartLine,
-                    () => _navigateToLevel(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'Nobel',
-                FontAwesomeIcons.crown,
-                    () => _navigateToNobel(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'My Items',
-                FontAwesomeIcons.crown,
-                    () => _navigateToItems(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'SVIP',
-                FontAwesomeIcons.gem,
-                    () => _navigateToSVIP(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'Achievements',
-                FontAwesomeIcons.trophy,
-                    () => _navigateToAchievements(context),
-              ),
-              _buildFeatureCard(
-                context,
-                'Invite Friends',
-                FontAwesomeIcons.userPlus,
-                    () => _navigateToInviteFriends(context),
-              ),
-              //_buildLogoutButton(context),
-              const SizedBox(height: 20),
-            ]),
-          ),
-        ],
+        ),
+      ),
+      body: BodyContainer(
+        padding: const EdgeInsets.all(20.0),
+        enableScroll: true,
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(  // Remove SingleChildScrollView since BodyContainer handles it
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildProfileSection(context),
+            SizedBox(height: 15.w),
+            _buildWalletSection(context),
+            SizedBox(height: 15.w),
+            _buildMainFeaturesSection(context),
+            SizedBox(height: 15.w),
+            _buildSecondaryFeaturesSection(context),
+            SizedBox(height: 15.w),
+            _buildSettingsSection(context),
+            SizedBox(height: 20.w),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildProfileCard(BuildContext context) {
-    if (isLoading) {
-      return const Card(
-        margin: EdgeInsets.all(8.0),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(32.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      );
-    }
-
+  Widget _buildProfileSection(BuildContext context) {
     String? avatarUrl;
     if (userData != null && userData!['avatar'] != null) {
       avatarUrl = '$baseUrl/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}';
     }
 
-    return Card(
-      margin: const EdgeInsets.all(12.0),
-      elevation: 8.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Hero(
-              tag: 'profileAvatar',
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.2),
-                      spreadRadius: 2,
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+    return Material(
+      color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
+      shadowColor: Colors.black26,
+      elevation: 5,
+      borderRadius: BorderRadius.circular(10.w),
+      child: InkWell(
+        onTap: () => _navigateToViewProfile(context),
+        borderRadius: BorderRadius.circular(10.w),
+        child: SizedBox(
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                vertical: 20.0,
+                horizontal: 20.0
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(30.w),
+                  child: avatarUrl != null
+                      ? Image.network(
+                    avatarUrl,
+                    width: 60.w,
+                    height: 60.w,
+                    fit: BoxFit.cover,
+                  )
+                      : Image.asset(
+                    'assets/images/avatar.png',
+                    width: 60.w,
+                    height: 60.w,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                SizedBox(width: 15.w),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      userData?['firstname'] ?? 'User',
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        color: kTextColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      userData?['phone'] ?? '94769146421',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        color: kAltTextColor,
+                      ),
                     ),
                   ],
                 ),
-                child: CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.grey[200],
-                  backgroundImage: avatarUrl != null
-                      ? NetworkImage(avatarUrl)
-                      : null,
-                  child: avatarUrl == null
-                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                      : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16.0),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userData?['firstname'] ?? 'User',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    userData?['moto'] ?? 'No motto set',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => _navigateToViewProfile(context),
-                  icon: const FaIcon(
-                    FontAwesomeIcons.eye,
-                    size: 16,
-                  ),
-                  label: const Text(
-                    'View',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20.0),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    elevation: 4,
+                const Spacer(),
+                SvgPicture.asset(
+                  'assets/icons/ic-arrow-right.svg',
+                  colorFilter: ColorFilter.mode(
+                      darkModeEnabled ? kDarkTextColor : kTextColor,
+                      BlendMode.srcIn
                   ),
                 ),
-
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWalletSection(BuildContext context) {
+    return Material(
+      color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
+      shadowColor: Colors.black26,
+      elevation: 5,
+      borderRadius: BorderRadius.circular(10.w),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            vertical: 20.0,
+            horizontal: 10.0
+        ),
+        child: Column(
+          children: [
+            AccountTile(
+              icon: Icons.wallet,
+              text: 'Wallet',
+              onTap: () => _navigateToWallet(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.diamond_outlined,
+              text: 'Earn diamond',
+              onTap: () => _navigateToEarnDiamond(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
             ),
           ],
         ),
@@ -258,112 +206,204 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _buildFeatureCard(BuildContext context, String title, IconData icon, VoidCallback onPressed) {
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      elevation: 2.0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-      child: ListTile(
-        leading: Container(
-          padding: EdgeInsets.all(8.0),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          child: FaIcon(icon, color: Colors.blue[700], size: 20),
-        ),
-        title: Text(title),
-        trailing: Icon(Icons.chevron_right),
-        onTap: onPressed,
-      ),
-    );
-  }
+  // Continue with other widget sections...
 
-  // Widget _buildLogoutButton(BuildContext context) {
-  //   return Padding(
-  //     padding: EdgeInsets.all(8.0),
-  //     child: ElevatedButton(
-  //       onPressed: () => _handleLogout(context),
-  //       child: Text('Logout'),
-  //       style: ElevatedButton.styleFrom(
-  //         foregroundColor: Colors.white,
-  //         backgroundColor: Colors.red,
-  //         padding: EdgeInsets.symmetric(vertical: 16.0),
-  //         shape: RoundedRectangleBorder(
-  //           borderRadius: BorderRadius.circular(12.0),
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
-
-  void _navigateToEditProfile(BuildContext context) async{
+  // Navigation methods
+  void _navigateToWallet(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    // Navigate to Edit Profile screen
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => EditProfileScreen(userId: 'd1k9aih2t9t9wo3',)),
+      MaterialPageRoute(builder: (context) => WalletScreen(userId: userId)),
     );
   }
 
   void _navigateToViewProfile(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    // // Navigate to Edit Profile screen
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(builder: (context) => ProfileApp()),
-    // );
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => MainProfile(
-          name: "tharindu",
+          name: userData?['firstname'] ?? "User",
           userId: userId,
-          profileImgUrl:"#",
+          profileImgUrl: userData?['avatar'] != null
+              ? '$baseUrl/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}'
+              : "#",
         ),
       ),
     );
   }
 
-  void _navigateToWallet(BuildContext context) async{
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => WalletScreen(userId: userId,)),
+
+  // Add these widget sections in the _AccountScreen1State class
+
+  Widget _buildMainFeaturesSection(BuildContext context) {
+    return Material(
+      color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
+      shadowColor: Colors.black26,
+      elevation: 5,
+      borderRadius: BorderRadius.circular(10.w),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
+        child: Column(
+          children: [
+            AccountTile(
+              icon: Icons.leaderboard_outlined,
+              text: 'Level',
+              onTap: () => _navigateToLevel(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.wallet_giftcard_outlined,
+              text: 'Nobel',
+              onTap: () => _navigateToNobel(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.workspace_premium_outlined,
+              text: 'Svip',
+              onTap: () => _navigateToSVIP(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.favorite_border_rounded,
+              text: 'Cp space',
+              onTap: () => _navigateToCpSpace(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.family_restroom_rounded,
+              text: 'Family',
+              onTap: () => _navigateToFamily(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  void _navigateToItems(BuildContext context) {
-    // Navigate to Nobel screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreScreen()));
+  Widget _buildSecondaryFeaturesSection(BuildContext context) {
+    return Material(
+      color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
+      shadowColor: Colors.black26,
+      elevation: 5,
+      borderRadius: BorderRadius.circular(10.w),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
+        child: Column(
+          children: [
+            AccountTile(
+              icon: Icons.add_chart_outlined,
+              text: 'Achievement',
+              onTap: () => _navigateToAchievements(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.list,
+              text: 'My items',
+              onTap: () => _navigateToItems(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.group_add_outlined,
+              text: 'Invited friends',
+              onTap: () => _navigateToInviteFriends(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _navigateToLevel(BuildContext context) async{
-    // Navigate to Level screen
-     final prefs = await SharedPreferences.getInstance();
-final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-   Navigator.of(context).push(MaterialPageRoute(builder: (_) => RankingPagelevel(ID: userId)));
- }
+  Widget _buildSettingsSection(BuildContext context) {
+    return Material(
+      color: darkModeEnabled ? kDarkBoxColor : kLightBlueColor,
+      shadowColor: Colors.black26,
+      elevation: 5,
+      borderRadius: BorderRadius.circular(10.w),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
+        child: Column(
+          children: [
+            AccountTile(
+              icon: Icons.language_outlined,
+              text: 'Language',
+              onTap: () => _navigateToLanguage(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.feedback_outlined,
+              text: 'Feedback',
+              onTap: () => _navigateToFeedback(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+            const Divider(color: Colors.black12, thickness: 0.3),
+            AccountTile(
+              icon: Icons.settings_outlined,
+              text: 'Setting',
+              onTap: () => _navigateToSettings(context),
+              endWidget: const TextWithArrow(text: '', showArrow: true),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _navigateToNobel(BuildContext context)async {
-    // Navigate to Nobel screen
-  final prefs = await SharedPreferences.getInstance();
- final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => profilepage(userId: userId, ID: userId,),));
+// Add these navigation methods in the _AccountScreen1State class
+
+  void _navigateToEarnDiamond(BuildContext context) {
+    // Implement earn diamond navigation
+  }
+
+  void _navigateToLevel(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => RankingPagelevel(ID: userId)
+    ));
+  }
+
+  void _navigateToNobel(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => profilepage(userId: userId, ID: userId)
+    ));
   }
 
   void _navigateToSVIP(BuildContext context) {
-    // Navigate to SVIP screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlaceholderScreen('SVIP')));
+    // Implement SVIP navigation
+  }
+
+  void _navigateToCpSpace(BuildContext context) {
+    // Implement CP space navigation
+  }
+
+  void _navigateToFamily(BuildContext context) {
+    // Implement family navigation
+  }
+
+  void _navigateToItems(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => StoreScreen()
+    ));
   }
 
   void _navigateToAchievements(BuildContext context) {
-    // Navigate to Achievements screen
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => AchievementPage()));
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => AchievementPage()
+    ));
   }
 
   void _navigateToInviteFriends(BuildContext context) {
@@ -373,51 +413,17 @@ final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
     );
   }
 
-  // void _handleLogout(BuildContext context) {
-  //   // Handle logout logic here
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: Text('Logout'),
-  //         content: Text('Are you sure you want to logout?'),
-  //         actions: <Widget>[
-  //           TextButton(
-  //             child: Text('Cancel'),
-  //             onPressed: () {
-  //               Navigator.of(context).pop();
-  //             },
-  //           ),
-  //           TextButton(
-  //             child: Text('Logout'),
-  //             onPressed: () {
-  //               // Perform logout action
-  //               Navigator.of(context).pop();
-  //               // Navigate to login screen or clear user session
-  //             },
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
-
-// Placeholder screen for navigation
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-
-  PlaceholderScreen(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
-      body: Center(
-        child: Text('This is the $title screen'),
-      ),
-    );
+  void _navigateToLanguage(BuildContext context) {
+    // Implement language settings navigation
   }
+
+  void _navigateToFeedback(BuildContext context) {
+    // Implement feedback navigation
+  }
+
+  void _navigateToSettings(BuildContext context) {
+    // Implement settings navigation
+  }
+
+// Add remaining navigation methods...
 }
