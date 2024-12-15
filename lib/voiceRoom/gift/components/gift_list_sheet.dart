@@ -519,6 +519,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
               'gifts_url': giftItem.sourceURL,
               'giftname': giftItem.name,
               'gift_count': count,
+              'voiceRoomId':widget.roomId
             })
         );
 

@@ -12,6 +12,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'memberlist.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
+import 'Ranking/roomRanking.dart';
 
 // Project imports:
 import 'constants.dart';
@@ -588,7 +589,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
           // Responsive Room Info Overlay
           Positioned(
-            top: MediaQuery.of(context).padding.top + 55, // Lowered position
+            top: MediaQuery.of(context).padding.top + 35, // Lowered position
             left: 10, // Adjusted for left corner
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -687,6 +688,82 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               },
             ),
           ),
+
+          // responsive ranking overlay..
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 95,
+            left: 0,
+            child: GestureDetector(
+              onTap: () {
+                // Show the bottom sheet
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (context) => RankingBottomSheet(roomId: widget.roomID),
+                );
+              },
+              child: Container(
+                height: 26,
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.22,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF8B4513),
+                      Color(0xFFDAA520),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(13),
+                    bottomRight: Radius.circular(13),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: Offset(1, 1),
+                    )
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        "Rank",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.none, // Ensures no underline
+                        ),
+                        maxLines: 1, // Ensures no overflow
+                        overflow: TextOverflow.ellipsis, // Handles text overflow gracefully
+                      ),
+                    ),
+                    const SizedBox(width: 4), // Adds space between the text and icon
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Icon(
+                        Icons.emoji_events,
+                        color: Colors.amber[100],
+                        size: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+
         ],
       ),
     );
@@ -1411,26 +1488,26 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             ),
           ),
         ),
-        Positioned(
-          top: 35,
-          left: 30,
-          right: 30,
-          // Add right and left to create space
-          bottom: 30,
-          // Add bottom if you want to create a border for the center
-          child: Align(
-            alignment: Alignment.topCenter, // This will center the text
-            child: Text(
-              '$_voiceRoomName',
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.blueAccent,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
+        // Positioned(
+        //   top: 35,
+        //   left: 30,
+        //   right: 30,
+        //   // Add right and left to create space
+        //   bottom: 30,
+        //   // Add bottom if you want to create a border for the center
+        //   child: Align(
+        //     alignment: Alignment.topCenter, // This will center the text
+        //     child: Text(
+        //       '$_voiceRoomName',
+        //       overflow: TextOverflow.ellipsis,
+        //       style: TextStyle(
+        //         color: Colors.blueAccent,
+        //         fontSize: 20,
+        //         fontWeight: FontWeight.bold,
+        //       ),
+        //     ),
+        //   ),
+        // ),
         Positioned(
           bottom: 165, // Adjusted position
           right: 16, // Adjusted position

@@ -150,7 +150,7 @@ class _AccountScreen1State extends State<AccountScreen1> {
                       ),
                     ),
                     Text(
-                      userData?['phone'] ?? '94769146421',
+                      userData?['phonenumber'] ?? '94769146421',
                       style: TextStyle(
                         fontSize: 14.sp,
                         color: kAltTextColor,
