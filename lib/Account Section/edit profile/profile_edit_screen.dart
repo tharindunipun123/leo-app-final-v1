@@ -57,6 +57,76 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  Future<void> selectDate(BuildContext context) async {
+    DateTime initialDate;
+
+    // Check if the birthday is available
+    if (userData?['birthday'] != null && userData!['birthday'].isNotEmpty) {
+      try {
+        initialDate = DateTime.parse(userData!['birthday']);
+      } catch (e) {
+        print('Date parse error: $e');
+        initialDate = DateTime.now(); // Fallback to current date
+      }
+    } else {
+      // If birthday is not available, set a default date
+      initialDate = DateTime.now(); // or any other default date
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      updateBirthday(picked);
+    }
+  }
+
+  Future<void> updateBirthday(DateTime birthday) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'birthday': birthday.toUtc().toIso8601String()}),
+      );
+
+      if (response.statusCode == 200) {
+        fetchUserData(); // Refresh UI
+      }
+    } catch (e) {
+      print('Error updating birthday: $e');
+    }
+  }
+
+  Future<void> pickAndUploadImage({bool isCoverPhoto = false}) async {
+    try {
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        final bytes = await File(pickedFile.path).readAsBytes();
+        final ext = extension(pickedFile.path);
+        var request = http.MultipartRequest(
+          'PATCH',
+          Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}'),
+        );
+
+        request.files.add(http.MultipartFile.fromBytes(
+          isCoverPhoto ? 'coverphoto' : 'avatar', // Determine field name based on type
+          bytes,
+          filename: 'coverphoto$ext',
+        ));
+
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          fetchUserData(); // Refresh UI
+        }
+      }
+    } catch (e) {
+      print('Error uploading image: $e');
+    }
+  }
 
   // Future<void> selectDate(BuildContext context) async {
   //   DateTime initialDate;
@@ -102,36 +172,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   //   }
   // }
 
-  Future<void> pickAndUploadImage() async {
-    try {
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-      if (pickedFile != null) {
-        final bytes = await File(pickedFile.path).readAsBytes();
-        final ext = extension(pickedFile.path);
-
-        var request = http.MultipartRequest(
-            'PATCH',
-            Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}')
-        );
-
-        request.files.add(
-            http.MultipartFile.fromBytes(
-                'avatar',
-                bytes,
-                filename: 'avatar$ext'
-            )
-        );
-
-        final response = await request.send();
-        if (response.statusCode == 200) {
-          fetchUserData(); // Refresh UI
-        }
-      }
-    } catch (e) {
-      print('Error uploading image: $e');
-    }
-  }
+  // Future<void> pickAndUploadImage() async {
+  //   try {
+  //     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+  //
+  //     if (pickedFile != null) {
+  //       final bytes = await File(pickedFile.path).readAsBytes();
+  //       final ext = extension(pickedFile.path);
+  //
+  //       var request = http.MultipartRequest(
+  //           'PATCH',
+  //           Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${widget.userId}')
+  //       );
+  //
+  //       request.files.add(
+  //           http.MultipartFile.fromBytes(
+  //               'avatar',
+  //               bytes,
+  //               filename: 'avatar$ext'
+  //           )
+  //       );
+  //
+  //       final response = await request.send();
+  //       if (response.statusCode == 200) {
+  //         fetchUserData(); // Refresh UI
+  //       }
+  //     }
+  //   } catch (e) {
+  //     print('Error uploading image: $e');
+  //   }
+  // }
 
   Future<void> _saveCountryToDatabase(Country country) async {
     try {
@@ -160,7 +230,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: const AppBarBackButton(),
+        // leading: const AppBarBackButton(),
         centerTitle: true,
         title: Text(
           'Edit Profile',
@@ -184,21 +254,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ProfileEditTile(
                       icon: 'assets/icons/ic-user.svg',
                       text: 'Avatar',
-                      onTap: pickAndUploadImage,
+                      onTap: () => pickAndUploadImage(), // Call the method to pick and upload image
                       endWidget: ClipRRect(
                         borderRadius: BorderRadius.circular(10.w),
-                        child: userData?.containsKey('avatar') ?? false
+                        child: userData?.containsKey('avatar') ?? false && userData!['avatar'] != null
                             ? Image.network(
                           'http://145.223.21.62:8090/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}',
-                          width: 20.w,
-                          height: 20.w,
+                          width: 35.w, // Set a fixed width
+                          height: 35.w, // Set a fixed height
                           fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Handle image loading error
+                            return Container(
+                              width: 35.w,
+                              height: 35.w,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300], // Placeholder color
+                                borderRadius: BorderRadius.circular(10.w),
+                              ),
+                              child: Icon(Icons.error, color: Colors.red), // Optional error icon
+                            );
+                          },
                         )
-                            : Image.asset(
-                          'assets/images/avatar.png',
-                          width: 20.w,
-                          height: 20.w,
-                          fit: BoxFit.cover,
+                            : Container(
+                          width: 35.w, // Set a fixed width
+                          height: 35.w, // Set a fixed height
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300], // Placeholder color
+                            borderRadius: BorderRadius.circular(10.w),
+                          ),
+                          child: Icon(Icons.image, color: Colors.grey), // Placeholder icon
                         ),
                       ),
                     ),
@@ -207,6 +292,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       indent: 20.0,
                       endIndent: 20.0,
                     ),
+
+                    ProfileEditTile(
+                      icon: 'assets/icons/ic-image.svg', // Use appropriate icon
+                      text: 'Cover Photo',
+                      onTap: () => pickAndUploadImage(isCoverPhoto: true),
+                      endWidget: ClipRRect(
+                        borderRadius: BorderRadius.circular(10.w),
+                        child: userData?.containsKey('coverphoto') ?? false && userData!['coverphoto'] != null
+                            ? Image.network(
+                          'http://145.223.21.62:8090/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['coverphoto']}',
+                          width: 35.w, // Set a fixed width
+                          height: 35.w, // Set a fixed height
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Handle image loading error
+                            return Text("Not Set");
+                          },
+                        )
+                            : Container(
+                          width: 100.w, // Set a fixed width
+                          height: 100.w, // Set a fixed height
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300], // Placeholder color
+                            borderRadius: BorderRadius.circular(10.w),
+                          ),
+                          child: Icon(Icons.image, color: Colors.grey), // Placeholder icon
+                        ),
+                      ),
+                    ),
+
                   ],
                 ),
               ),
@@ -287,6 +402,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     //         : 'Not set',
                     //   ),
                     // ),
+                    ProfileEditTile(
+                      icon: 'assets/icons/ic_calendar.svg',
+                      text: 'Birthday',
+                      onTap: () => selectDate(context),
+                      endWidget: TextWithArrow(
+                        text: userData?['birthday'] != null && userData!['birthday'].isNotEmpty
+                            ? DateTime.parse(userData!['birthday']).toLocal().toString().split(' ')[0]
+                            : 'Not set', // Display 'Not set' if birthday is not available
+                      ),
+                    ),
+
                     _buildDivider(),
                     ProfileEditTile(
                       icon: 'assets/icons/ic-list.svg',

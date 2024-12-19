@@ -48,6 +48,12 @@ class _AccountScreen1State extends State<AccountScreen1> {
       if (response.statusCode == 200) {
         setState(() {
           userData = json.decode(response.body);
+
+          // Convert phonenumber to string if it's not already
+          if (userData != null && userData!['phonenumber'] is int) {
+            userData!['phonenumber'] = userData!['phonenumber'].toString();
+          }
+
           isLoading = false;
         });
       } else {
@@ -66,7 +72,7 @@ class _AccountScreen1State extends State<AccountScreen1> {
        // leading: const AppBarBackButton(),
         centerTitle: true,
         title: Text(
-          'My Account',
+          'Edit Profile',
           style: TextStyle(
             fontSize: 16.sp,
             color: darkModeEnabled ? kDarkTextColor : kTextColor,

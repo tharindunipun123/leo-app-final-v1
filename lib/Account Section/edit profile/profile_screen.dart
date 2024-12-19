@@ -206,6 +206,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    // Fetch the cover photo URL
+    String coverPhotoUrl = userProfile!['coverphoto'] != null && userProfile!['coverphoto'].isNotEmpty
+        ? '$baseUrl/api/files/${userProfile!['collectionId']}/${userProfile!['id']}/${userProfile!['coverphoto']}'
+        : 'assets/images/default_cover.png'; // Default cover image if not available
+
     return Scaffold(
       bottomNavigationBar: Container(
         width: double.infinity,
@@ -230,11 +235,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Image.asset(
-              'assets/images/coverpic.png',
+            // Display the cover photo
+            Image.network(
+              coverPhotoUrl,
               width: double.infinity,
               height: 150,
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset(
+                  'assets/images/default_cover.png', // Fallback image in case of error
+                  width: double.infinity,
+                  height: 150,
+                  fit: BoxFit.cover,
+                );
+              },
             ),
             Padding(
               padding: const EdgeInsets.all(20.0),
