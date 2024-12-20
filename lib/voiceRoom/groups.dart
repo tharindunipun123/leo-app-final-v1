@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'Ranking/globalranking.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
 import 'package:country_icons/country_icons.dart';
@@ -718,42 +719,52 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
 
           // Rank Square
           Expanded(
-            child: Container(
-              height: 80, // Reduced from 100
-              margin: EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFFFB347),
-                    Color(0xFFFFE5B4),
-                  ],
-                  stops: [0.2, 0.9],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0xFFFFB347).withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
+            child: GestureDetector(  // Added GestureDetector for tap handling
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => GlobalRanking(),
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.workspace_premium, color: Colors.white, size: 28), // Reduced icon size
-                  SizedBox(height: 4), // Reduced spacing
-                  Text(
-                    'Rank',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14, // Reduced font size
-                      fontWeight: FontWeight.bold,
+                );
+              },
+              child: Container(
+                height: 80,
+                margin: EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFFFFB347),
+                      Color(0xFFFFE5B4),
+                    ],
+                    stops: [0.2, 0.9],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0xFFFFB347).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.workspace_premium, color: Colors.white, size: 28),
+                    SizedBox(height: 4),
+                    Text(
+                      'Rank',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
