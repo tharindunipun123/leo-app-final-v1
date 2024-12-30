@@ -169,18 +169,19 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   }
 
   String _getFlagUrl(String countryName) {
-    // Convert country name to lowercase for matching
-    final lowercaseCountry = countryName.toLowerCase();
-
-    // First try to find in _countries list
-    final countryData = _countries.firstWhere(
-          (country) => country['name']!.toLowerCase() == lowercaseCountry,
-      orElse: () => {'flag': 'https://flagcdn.com/w320/${lowercaseCountry.substring(0, 2)}.png'},
-    );
-
-    return countryData['flag'] ?? 'https://flagcdn.com/w320/xx.png'; // xx.png as fallback
+    try {
+      // Create CountryService instance
+      final countryService = CountryService();
+      // Find country by name
+      final country = countryService.findByName(countryName);
+      if (country != null) {
+        return 'https://flagcdn.com/w320/${country.countryCode.toLowerCase()}.png';
+      }
+    } catch (e) {
+      print('Error finding country code: $e');
+    }
+    return 'https://flagcdn.com/w320/xx.png'; // Fallback flag
   }
-
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();

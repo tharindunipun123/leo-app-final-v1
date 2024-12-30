@@ -552,36 +552,25 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             config: config,
           ),
 
+          // In the build method, replace the existing leave button with:
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             right: 10,
             child: GestureDetector(
               onTap: () => _showLogoutDialog(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                width: 35, // Fixed circular size
+                height: 35, // Fixed circular size
                 decoration: BoxDecoration(
-                  color: Colors.red,  // Removed opacity
-                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.black.withOpacity(0.8), // Slightly transparent black
+                  shape: BoxShape.circle, // Circular shape
                 ),
-                child: Row(  // Removed const since we want to modify children
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.logout,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(  // Removed const to prevent decoration underline warning
-                      'Leave',
-                      style: TextStyle(  // Removed const and fixed text decoration
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        decoration: TextDecoration.none,  // This removes the underline
-                      ),
-                    ),
-                  ],
+                child: Center(
+                  child: Icon(
+                    Icons.power_settings_new, // Shutdown/power icon
+                    color: Colors.white.withOpacity(0.9), // Slightly faded white
+                    size: 19,
+                  ),
                 ),
               ),
             ),
@@ -589,7 +578,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
           // Responsive Room Info Overlay
           Positioned(
-            top: MediaQuery.of(context).padding.top + 35, // Lowered position
+            top: MediaQuery.of(context).padding.top + 16, // Lowered position
             left: 10, // Adjusted for left corner
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -769,31 +758,160 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     );
   }
 
-  void _showLogoutDialog(BuildContext context) {
+  void _showFullBlackLogoutContainer() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Room'),
-        content: const Text('Are you sure you want to leave this room?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              await _handleLogout();
-            },
-            child: const Text(
-              'Leave',
-              style: TextStyle(color: Colors.red),
+      barrierColor: Colors.black.withOpacity(0.8), // Semi-transparent black
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async {
+            Navigator.of(context).pop();
+            return false;
+          },
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logout Button
+                Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        _handleLogout();
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.lightBlue,
+                              Colors.lightBlue
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              spreadRadius: 2,
+                              blurRadius: 10,
+                              offset: Offset(0, 5),
+                            )
+                          ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.power_settings_new,
+                            color: Colors.white,
+                            size: 50,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 30), // Space between buttons
+
+                // Keep Button
+                Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.lightBlue,
+                              Colors.lightBlue,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              spreadRadius: 2,
+                              blurRadius: 10,
+                              offset: Offset(0, 5),
+                            )
+                          ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.upload_outlined,
+                            color: Colors.white,
+                            size: 50,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Keep',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
+
+// Modify the _showLogoutDialog method to use the new full black container
+  void _showLogoutDialog(BuildContext context) {
+    _showFullBlackLogoutContainer(); // Replace the existing alert dialog
+  }
+
+  // void _showLogoutDialog(BuildContext context) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('Leave Room'),
+  //       content: const Text('Are you sure you want to leave this room?'),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         TextButton(
+  //           onPressed: () async {
+  //             Navigator.pop(context); // Close dialog
+  //             await _handleLogout();
+  //           },
+  //           child: const Text(
+  //             'Leave',
+  //             style: TextStyle(color: Colors.red),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
 
 
