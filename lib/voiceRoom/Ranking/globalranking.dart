@@ -656,7 +656,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
                 ),
                 SizedBox(width: 8),
                 _buildCategoryButton(
-                  'Billionaires',
+                  'Top Recharger',
                   [Color(0xFF4682B4).withOpacity(0.95), Color(0xFF0000CD).withOpacity(0.90)], // Royal gradient
                   'Billionaires',
                 ),
