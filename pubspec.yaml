@@ -155,6 +155,10 @@ flutter:
     - assets/images/medal1.png
     - assets/images/medal2.png
     - assets/images/medal3.png
+    - assets/images/badge_1.png
+    - assets/images/badge_2.png
+    - assets/images/badge_3.png
+    - assets/images/badge_4.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

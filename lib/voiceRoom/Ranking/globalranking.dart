@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:leo_app_01/voiceRoom/Ranking/rewards.dart';
+import 'package:leo_app_01/voiceRoom/Ranking/rules.dart';
 import 'TopGifter.dart';
 import 'TopRecharger.dart';
 import 'TopStar.dart';
@@ -617,50 +619,77 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
 
   @override
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Ranking'),
+        title: const Text('Ranking'),
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'rewards') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const RewardsPage()),
+                );
+              } else if (value == 'rules') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const RulesPage()),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'rewards',
+                child: Text('Rewards'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'rules',
+                child: Text('Rules'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
           // Category buttons row
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildCategoryButton(
                   'Top Rooms',
-                  [Color(0xFFFF8C00).withOpacity(0.95), Color(0xFFDC143C).withOpacity(0.90)], // Ocean gradient
+                  [const Color(0xFFFF8C00).withOpacity(0.95), const Color(0xFFDC143C).withOpacity(0.90)],
                   'TopRooms',
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 _buildCategoryButton(
                   'Top Gifters',
-
-                  [Color(0xFF9370DB).withOpacity(0.95), Color(0xFF4B0082).withOpacity(0.90)],// Sunset gradient
+                  [const Color(0xFF9370DB).withOpacity(0.95), const Color(0xFF4B0082).withOpacity(0.90)],
                   'TopGifters',
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 _buildCategoryButton(
                   'Top Stars',
-                  [Color(0xFF3CB371).withOpacity(0.95), Color(0xFF006400).withOpacity(0.90)], // Nature gradient
+                  [const Color(0xFF3CB371).withOpacity(0.95), const Color(0xFF006400).withOpacity(0.90)],
                   'TopStars',
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 _buildCategoryButton(
                   'Top Recharger',
-                  [Color(0xFF4682B4).withOpacity(0.95), Color(0xFF0000CD).withOpacity(0.90)], // Royal gradient
+                  [const Color(0xFF4682B4).withOpacity(0.95), const Color(0xFF0000CD).withOpacity(0.90)],
                   'Billionaires',
                 ),
-
               ],
             ),
           ),
@@ -679,7 +708,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
                 controller: _timeTabController,
                 labelColor: Colors.blue,
                 unselectedLabelColor: Colors.grey,
-                tabs: [
+                tabs: const [
                   Tab(text: 'Today'),
                   Tab(text: 'This Week'),
                   Tab(text: 'This Month'),
