@@ -173,7 +173,12 @@ class _RankingBottomSheetState extends State<Topstar> with SingleTickerProviderS
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChange);
     _loadAllData();
+  }
+
+  void _handleTabChange() {
+    setState(() {});
   }
 
   Future<void> _loadAllData() async {
@@ -466,100 +471,148 @@ class _RankingBottomSheetState extends State<Topstar> with SingleTickerProviderS
   }
 
   Widget _buildRankingList(List<Map<String, dynamic>> rankings) {
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: rankings.length,
-      itemBuilder: (context, index) {
-        final ranking = rankings[index];
-        final userDetail = ranking['userDetails'];
+    String refreshMessage = '';
+    switch (_tabController.index) {
+      case 0:
+        refreshMessage = 'This ranking will refresh every day at 00:00 (GMT+5:30)';
+        break;
+      case 1:
+        refreshMessage = 'This ranking will refresh every Sunday at 00:00 (GMT+5:30)';
+        break;
+      case 2:
+        refreshMessage = 'This ranking will refresh at the end of every month at 00:00 (GMT+5:30)';
+        break;
+    }
 
-        return Container(
-          margin: EdgeInsets.symmetric(vertical: 8),
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.purple.withOpacity(0.1),
+                Colors.blue.withOpacity(0.1),
+              ],
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.grey[300]!,
+                width: 1,
+              ),
+            ),
+          ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Rank number or medal
-              Container(
-                width: 30,
-                margin: EdgeInsets.only(right: 12),
-                child: index < 3
-                    ? Image.asset('assets/images/medal${index + 1}.png')
-                    : Text(
-                  '${index + 1}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ),
-
-              // Profile image
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[200]!),
-                  image: DecorationImage(
-                    image: NetworkImage(
-                        'http://145.223.21.62:8090/api/files/${userDetail['collectionId']}/${userDetail['id']}/${userDetail['avatar']}'
-                    ),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-
-              SizedBox(width: 12),
-
-              // Name and motto
+              SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      userDetail['firstname'] ?? 'Unknown',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                    Text(
-                      userDetail['moto'] ?? '',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                child: Text(
+                  refreshMessage,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-
-              // Diamond amount
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/diamond.png',
-                    width: 16,
-                    height: 16,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    '${ranking['total'].toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: Colors.black,
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: rankings.length,
+            itemBuilder: (context, index) {
+              final ranking = rankings[index];
+              final userDetail = ranking['userDetails'];
+
+              return Container(
+                margin: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      margin: EdgeInsets.only(right: 12),
+                      child: index < 3
+                          ? Image.asset('assets/images/medal${index + 1}.png')
+                          : Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.grey[200]!),
+                        image: DecorationImage(
+                          image: NetworkImage(
+                              'http://145.223.21.62:8090/api/files/${userDetail['collectionId']}/${userDetail['id']}/${userDetail['avatar']}'
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            userDetail['firstname'] ?? 'Unknown',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          Text(
+                            userDetail['moto'] ?? '',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/diamond.png',
+                          width: 16,
+                          height: 16,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          '${ranking['total'].toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

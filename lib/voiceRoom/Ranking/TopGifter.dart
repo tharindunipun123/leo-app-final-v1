@@ -172,9 +172,11 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChange); // Add this line
     _updateRefreshMessage();
     _loadAllData();
   }
+
 
   void _updateRefreshMessage() {
     setState(() {
@@ -186,16 +188,14 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
           refreshMessage = 'This ranking will refresh every Sunday at 00:00 (GMT+5:30)';
           break;
         case 2:
-          refreshMessage = 'This ranking will refresh at the end of every month at 00:00 (GMT+5:30)';
+          refreshMessage = 'This ranking will refresh at the end of every month (GMT+5:30)';
           break;
       }
     });
   }
 
   void _handleTabChange() {
-    if (_tabController.indexIsChanging) {
-      _updateRefreshMessage();
-    }
+    _updateRefreshMessage();
   }
 
   Future<void> _loadAllData() async {
@@ -510,20 +510,17 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.refresh,
-                size: 14,
-                color: Colors.grey[600],
-              ),
               SizedBox(width: 8),
-              Text(
-                refreshMessage,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+              Expanded( // Add this
+                child: Text(
+                  refreshMessage,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
