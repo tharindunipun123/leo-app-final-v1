@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
 import 'Ranking/globalranking.dart';
 import 'live_page.dart';
 import 'voiceRoomCreate.dart';
@@ -1444,6 +1445,10 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   }
 
   void _navigateToLivePage(VoiceRoom room) {
+    if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
+      return;
+    }
+
     final isHost = room.ownerId == _userId;
     Navigator.push(
       context,

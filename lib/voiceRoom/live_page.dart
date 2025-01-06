@@ -538,226 +538,291 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Stack(
-        children: [
-          // Main Zego UIKit widget
-          ZegoUIKitPrebuiltLiveAudioRoom(
-            appID: 2069292420,
-            appSign: '3b8893143a13c24f6d82dd7260b70a9d29814b99130e7bcebfe3e09dac8c0731',
-            userID: localUserID,
-            userName: widget.username1,
-            roomID: widget.roomID,
-            events: events,
-            config: config,
-          ),
+    return WillPopScope(
+      onWillPop: () async {
+        if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
+          return true;
+        }
 
-          // In the build method, replace the existing leave button with:
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            right: 10,
-            child: GestureDetector(
-              onTap: () => _showLogoutDialog(context),
-              child: Container(
-                width: 35, // Fixed circular size
-                height: 35, // Fixed circular size
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.8), // Slightly transparent black
-                  shape: BoxShape.circle, // Circular shape
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.power_settings_new, // Shutdown/power icon
-                    color: Colors.white.withOpacity(0.9), // Slightly faded white
-                    size: 19,
+        // Show minimize option dialog
+        bool? shouldPop = await showDialog<bool>(
+          context: context,
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Leave Room',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Would you like to minimize or leave the room?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          ZegoUIKitPrebuiltLiveAudioRoomController()
+                              .minimize;
+                          Navigator.pop(context, false);
+                        },
+                        child: Text('Minimize'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await _handleLogout();
+                          Navigator.pop(context, true);
+                        },
+                        child: Text(
+                          'Leave',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        return shouldPop ?? false;
+      },
+      child: SafeArea(
+        child: Stack(
+          children: [
+            // Main Zego UIKit widget
+            ZegoUIKitPrebuiltLiveAudioRoom(
+              appID: 2069292420,
+              appSign: '3b8893143a13c24f6d82dd7260b70a9d29814b99130e7bcebfe3e09dac8c0731',
+              userID: localUserID,
+              userName: widget.username1,
+              roomID: widget.roomID,
+              events: events,
+              config: config,
+            ),
+
+            // Power/Logout button
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 10,
+              child: GestureDetector(
+                onTap: () => _showLogoutDialog(context),
+                child: Container(
+                  width: 35,
+                  height: 35,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.power_settings_new,
+                      color: Colors.white.withOpacity(0.9),
+                      size: 19,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // Responsive Room Info Overlay
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 16, // Lowered position
-            left: 10, // Adjusted for left corner
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.3, // 50% of screen width
-                    minHeight: 40, // Minimum height
-                    maxHeight: 50, // Maximum height
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.blueAccent.withOpacity(0.7),
-                        Colors.lightBlueAccent.withOpacity(0.7)
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+            // Room Info Overlay
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              left: 55,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.3,
+                      minHeight: 40,
+                      maxHeight: 50,
                     ),
-                    borderRadius: BorderRadius.circular(25), // More rounded
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 5,
-                        offset: Offset(0, 2),
-                      )
-                    ],
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Room Image
-                      GestureDetector(
-                        onTap: () {
-                          // Add debounce logic
-                          final now = DateTime.now();
-                          if (_lastTapTime != null &&
-                              now.difference(_lastTapTime!) < const Duration(milliseconds: 500)) {
-                            // If tapped within 500ms, ignore this tap
-                            return;
-                          }
-                          _lastTapTime = now;
-
-                          // Show bottom sheet
-                          _showBottomSheet(context, widget.roomID);
-                        },
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white30, width: 1),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: _groupPhotoUrl != null
-                                ? Image.network(
-                              _groupPhotoUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Icon(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.blueAccent.withOpacity(0.7),
+                          Colors.lightBlueAccent.withOpacity(0.7)
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 5,
+                          offset: Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Room Image
+                        GestureDetector(
+                          onTap: () {
+                            final now = DateTime.now();
+                            if (_lastTapTime != null &&
+                                now.difference(_lastTapTime!) < const Duration(milliseconds: 500)) {
+                              return;
+                            }
+                            _lastTapTime = now;
+                            _showBottomSheet(context, widget.roomID);
+                          },
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white30, width: 1),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: _groupPhotoUrl != null
+                                  ? Image.network(
+                                _groupPhotoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Icon(
+                                  Icons.image,
+                                  size: 20,
+                                  color: Colors.white54,
+                                ),
+                              )
+                                  : Icon(
                                 Icons.image,
                                 size: 20,
                                 color: Colors.white54,
                               ),
-                            )
-                                : Icon(
-                              Icons.image,
-                              size: 20,
-                              color: Colors.white54,
                             ),
                           ),
                         ),
-                      ),
 
+                        const SizedBox(width: 8),
 
-                      const SizedBox(width: 8),
+                        // Room Name
+                        Flexible(
+                          child: Text(
+                            _voiceRoomName ?? "Voice Room",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
 
-                      // Room Name
+            // Ranking Overlay
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 95,
+              left: 0,
+              child: GestureDetector(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (context) => RankingBottomSheet(roomId: widget.roomID),
+                  );
+                },
+                child: Container(
+                  height: 26,
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.22,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFF8B4513),
+                        Color(0xFFDAA520),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(13),
+                      bottomRight: Radius.circular(13),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        spreadRadius: 1,
+                        blurRadius: 3,
+                        offset: Offset(1, 1),
+                      )
+                    ],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                       Flexible(
                         child: Text(
-                          _voiceRoomName ?? "Voice Room",
+                          "Rank",
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // responsive ranking overlay..
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 95,
-            left: 0,
-            child: GestureDetector(
-              onTap: () {
-                // Show the bottom sheet
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: Colors.transparent,
-                  isScrollControlled: true,
-                  builder: (context) => RankingBottomSheet(roomId: widget.roomID),
-                );
-              },
-              child: Container(
-                height: 26,
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.22,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF8B4513),
-                      Color(0xFFDAA520),
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(13),
-                    bottomRight: Radius.circular(13),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      spreadRadius: 1,
-                      blurRadius: 3,
-                      offset: Offset(1, 1),
-                    )
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        "Rank",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.none, // Ensures no underline
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Icon(
+                          Icons.emoji_events,
+                          color: Colors.amber[100],
+                          size: 14,
                         ),
-                        maxLines: 1, // Ensures no overflow
-                        overflow: TextOverflow.ellipsis, // Handles text overflow gracefully
                       ),
-                    ),
-                    const SizedBox(width: 4), // Adds space between the text and icon
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: Icon(
-                        Icons.emoji_events,
-                        color: Colors.amber[100],
-                        size: 14,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          )
-
-        ],
+          ],
+        ),
       ),
     );
   }
-
+  // screen eka kalu wela logout wena kalla
   void _showFullBlackLogoutContainer() {
     showDialog(
       context: context,
@@ -781,8 +846,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         Navigator.of(context).pop();
                       },
                       child: Container(
-                        width: 120,
-                        height: 120,
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
@@ -806,7 +871,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                           child: Icon(
                             Icons.power_settings_new,
                             color: Colors.white,
-                            size: 50,
+                            size: 40,
                           ),
                         ),
                       ),
@@ -816,7 +881,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                       'Logout',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -833,8 +898,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         Navigator.of(context).pop();
                       },
                       child: Container(
-                        width: 120,
-                        height: 120,
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
@@ -856,19 +921,19 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                         ),
                         child: Center(
                           child: Icon(
-                            Icons.upload_outlined,
+                            Icons.close,
                             color: Colors.white,
-                            size: 50,
+                            size: 40,
                           ),
                         ),
                       ),
                     ),
                     SizedBox(height: 10),
                     Text(
-                      'Keep',
+                      'Cancel',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1502,7 +1567,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ..mediaPlayer.supportTransparent = true
       ..foreground = giftForeground()
       ..emptyAreaBuilder = mediaPlayer
-      ..topMenuBar.buttons = [ZegoLiveAudioRoomMenuBarButtonName.minimizingButton]
+      ..topMenuBar.buttons = [
+        ZegoLiveAudioRoomMenuBarButtonName.minimizingButton, // Keep only this button
+      ]
       ..userAvatarUrl = _userAvatarUrl;
   }
 

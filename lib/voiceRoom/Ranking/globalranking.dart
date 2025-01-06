@@ -202,11 +202,13 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
   }
 
 
-  String _getFlagUrl(String countryName) {
+  String _getFlagUrl(String? countryName) {
+    if (countryName == null || countryName.isEmpty) {
+      return 'https://flagcdn.com/w320/xx.png'; // Fallback flag
+    }
+
     try {
-      // Create CountryService instance
       final countryService = CountryService();
-      // Find country by name
       final country = countryService.findByName(countryName);
       if (country != null) {
         return 'https://flagcdn.com/w320/${country.countryCode.toLowerCase()}.png';
@@ -216,7 +218,6 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     }
     return 'https://flagcdn.com/w320/xx.png'; // Fallback flag
   }
-
 
 
   Future<void> _fetchLastWeekTopRoom() async {
@@ -461,7 +462,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          room['voice_room_name'],
+                          room['voice_room_name'] ?? 'Unnamed Room', // Add null check with default value
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
@@ -634,10 +635,11 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'rewards') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const RewardsPage()),
-                );
+                showRankingRewardPopup(context);
+                // Navigator.push(
+                //   context,
+                //   MaterialPageRoute(builder: (context) => const RewardsPage()),
+                // );
               } else if (value == 'rules') {
                 Navigator.push(
                   context,
@@ -722,6 +724,29 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
           ),
         ],
       ),
+    );
+  }
+
+  // Show the popup with a smooth fade animation
+  void showRankingRewardPopup(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black87,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation1, animation2) => const RankingRewardPopup(),
+      transitionBuilder: (context, animation1, animation2, child) {
+        return FadeTransition(
+          opacity: animation1,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+              CurvedAnimation(parent: animation1, curve: Curves.easeOutQuad),
+            ),
+            child: child,
+          ),
+        );
+      },
     );
   }
 

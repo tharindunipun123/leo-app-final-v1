@@ -1,36 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';  // Add this import
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:leo_app_01/StartScreen.dart';
 import 'package:leo_app_01/splash.dart';
 import 'package:zego_zimkit/zego_zimkit.dart';
+import 'package:zego_uikit/zego_uikit.dart';
+import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
 import 'package:flutter/cupertino.dart';
 import 'chat/default_dialogs.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   // Initialize the ZEGOCLOUD SDK
   ZIMKit().init(
-    appID: 1382376685, // Replace with your AppID
-    appSign: '0a9bce0b90584625b087d27e8e3c9a2a15ea28eb16119022da829f87c3763142', // Replace with your AppSign
+    appID: 1382376685,
+    appSign: '0a9bce0b90584625b087d27e8e3c9a2a15ea28eb16119022da829f87c3763142',
   );
-  runApp(MyApp());
+
+  ZegoUIKit().initLog().then((value) {
+    runApp(MyApp());
+  });
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return ScreenUtilInit(
       designSize: const Size(360, 690),
       minTextAdapt: true,
       splitScreenMode: true,
-      builder: (_, child) {
+      builder: (context, child) {
         return MaterialApp(
+          navigatorKey: navigatorKey, // Add the navigator key
           debugShowCheckedModeBanner: false,
           title: 'ZEGOCLOUD Chat App',
           theme: ThemeData(
             primarySwatch: Colors.blue,
             scaffoldBackgroundColor: Colors.white,
           ),
-          home: SplashScreen(),
+          home: ZegoUIKitPrebuiltLiveAudioRoomMiniPopScope(
+            child: SplashScreen(),
+          ),
+          builder: (BuildContext context, Widget? child) {
+            return Stack(
+              children: [
+                child!,
+                ZegoUIKitPrebuiltLiveAudioRoomMiniOverlayPage(
+                  contextQuery: () {
+                    return navigatorKey.currentState!.context;
+                  },
+                  // Customize the minimized window appearance
+                  size: Size(120, 160),
+                  showDevices: true,
+                  showUserName: true,
+                  showLeaveButton: true,
+                  borderRadius: 12.0,
+                  borderColor: Colors.blue.withOpacity(0.2),
+                  backgroundColor: Colors.black.withOpacity(0.8),
+                  soundWaveColor: Colors.purple,
+                ),
+              ],
+            );
+          },
         );
       },
     );

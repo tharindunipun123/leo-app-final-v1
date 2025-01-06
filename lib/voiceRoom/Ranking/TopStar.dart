@@ -78,7 +78,7 @@ class TopGifterCard extends StatelessWidget {
                       ),
                       SizedBox(width: 4),
                       Text(
-                        'Last Week\'s Top Gifter',
+                        'Last Week\'s Top Star',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 12,

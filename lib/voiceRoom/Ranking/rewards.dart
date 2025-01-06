@@ -1,180 +1,223 @@
 import 'package:flutter/material.dart';
 
-class RewardsPage extends StatelessWidget {
-  const RewardsPage({Key? key}) : super(key: key);
+class RankingRewardPopup extends StatelessWidget {
+  const RankingRewardPopup({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
-        width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.black87,
+          color: const Color(0xFF1E1E2C),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFB8860B),
+            color: const Color(0xFFFFD700),
             width: 2,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFD700).withOpacity(0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
-            Container(
-              height: 60,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFFB8860B),
-                    Color(0xFFDAA520),
-                  ],
-                ),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(18),
-                  topRight: Radius.circular(18),
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Text(
-                    'Ranking Reward',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Positioned(
-                    right: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.help_outline, color: Colors.white),
-                      onPressed: () {
-                        // Show help info
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Country List Button
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFB8860B), Color(0xFFDAA520)],
-                ),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: Colors.white24,
-                  width: 1,
-                ),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    // Handle country list tap
-                  },
-                  borderRadius: BorderRadius.circular(25),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                    child: Text(
-                      'Country List',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Rewards Grid
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildTopSection(),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
+            _buildHeader(),
+            _buildContent(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTopSection() {
-    return Column(
-      children: [
-        const Text(
-          'Top1-3',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildBadge('assets/images/badge_1.png', 'Honor'),
-            _buildBadge('assets/images/badge_2.png', 'Regal'),
-            _buildBadge('assets/images/badge_3.png', 'Influence'),
-            _buildBadge('assets/images/badge_4.png', 'Special'),
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF4B0082),  // Indigo
+            Color(0xFF8A2BE2),  // BlueViolet
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      ],
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Text(
+            'Ranking Rewards',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBadge(String imagePath, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            color: Colors.green,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFB8860B),
-              width: 2,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              imagePath,
-              fit: BoxFit.cover,
-            ),
-          ),
+  Widget _buildContent() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF4B0082).withOpacity(0.85),
+            const Color(0xFF8A2BE2).withOpacity(0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-          ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFFD700),
+          width: 1.5,
         ),
-      ],
+      ),
+      child: Column(
+        children: [
+          _buildRewardsHeader(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: _buildBadgesGrid(),
+          ),
+        ],
+      ),
     );
   }
-}
 
-// Usage:
-void showRewardsDialog(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (context) => const RewardsPage(),
-  );
+  Widget _buildRewardsHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFFFD700).withOpacity(0.4),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(
+            Icons.emoji_events_rounded,
+            color: Colors.white70,
+            size: 20,
+          ),
+          SizedBox(width: 8),
+          Text(
+            'Rewards for Top Users',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(width: 8),
+          Icon(
+            Icons.arrow_forward_ios,
+            color: Colors.white70,
+            size: 14,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgesGrid() {
+    final badges = [
+      {'image': 'assets/images/badge_1.png', 'name': 'Top Room'},
+      {'image': 'assets/images/badge_2.png', 'name': 'Top Gifter'},
+      {'image': 'assets/images/badge_3.png', 'name': 'Top Star'},
+      {'image': 'assets/images/badge_4.png', 'name': 'Top Recharger'},
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 20) / 2; // Account for spacing
+        final itemHeight = itemWidth * 1.4; // Increased height ratio
+        final imageSize = itemWidth * 0.95; // Image takes 95% of item width
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 20,
+            mainAxisSpacing: 20,
+            childAspectRatio: itemWidth / itemHeight,
+          ),
+          itemCount: badges.length,
+          itemBuilder: (context, index) => _buildBadgeItem(
+            badges[index]['image']!,
+            badges[index]['name']!,
+            imageSize,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBadgeItem(String imagePath, String title, double imageSize) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fontSize = constraints.maxWidth * 0.11; // Responsive font size
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min, // Important to prevent overflow
+          children: [
+            SizedBox(
+              height: imageSize,
+              child: Image.asset(
+                imagePath,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: imageSize * 0.08), // Proportional spacing
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: imageSize * 0.1,
+                vertical: imageSize * 0.05,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF4B0082).withOpacity(0.9),
+                    const Color(0xFF8A2BE2).withOpacity(0.9),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(imageSize * 0.08),
+              ),
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
