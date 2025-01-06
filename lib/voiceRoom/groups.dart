@@ -1103,14 +1103,14 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: InkWell(
-          onTap: () async {
-            final isRemoved = await _checkIfUserRemoved(room.id);
-            if (isRemoved) {
-              _showRemovalAlert();
-            } else {
-              _navigateToLivePage(room);
-            }
-          },
+        onTap: () async {
+          final isRemoved = await _checkIfUserRemoved(room.id);
+          if (isRemoved) {
+            _showRemovalAlert();
+          } else {
+            _navigateToLivePage(room);
+          }
+        },
         child: Card(
           elevation: 2,
           color: Colors.white70,
@@ -1453,16 +1453,17 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => LivePage(
-          roomID: room.id,
-          isHost: isHost,
-          username1: _username ?? '',
-          userId: _userId!,
+        builder: (context) => ZegoUIKitPrebuiltLiveAudioRoomMiniPopScope(
+          child: LivePage(
+            roomID: room.id,
+            isHost: isHost,
+            username1: _username ?? '',
+            userId: _userId!,
+          ),
         ),
       ),
     );
   }
-
   @override
   void dispose() {
     _tabController.removeListener(_handleTabChange);

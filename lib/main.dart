@@ -43,7 +43,7 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: Colors.white,
           ),
           home: ZegoUIKitPrebuiltLiveAudioRoomMiniPopScope(
-            child: SplashScreen(),
+            child: SplashScreen(), // Your splash or main screen
           ),
           builder: (BuildContext context, Widget? child) {
             return Stack(
@@ -62,7 +62,21 @@ class MyApp extends StatelessWidget {
                   borderColor: Colors.blue.withOpacity(0.2),
                   backgroundColor: Colors.black.withOpacity(0.8),
                   soundWaveColor: Colors.purple,
+                  supportClickZoom: true, // Allow click-to-restore functionality
                 ),
+                // Positioned(
+                //   bottom: 20,
+                //   right: 20,
+                //   child: ElevatedButton(
+                //     onPressed: () {
+                //       if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
+                //         ZegoUIKitPrebuiltLiveAudioRoomController().minimize.restore(context);
+                //       }
+                //     },
+                //     child: Text("Restore Audio Room"),
+                //   ),
+                //
+                // ),
               ],
             );
           },

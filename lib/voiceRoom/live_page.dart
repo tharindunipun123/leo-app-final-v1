@@ -1,5 +1,6 @@
 // Flutter imports:
 import 'package:flutter/material.dart';
+
 import './gift/gift.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -13,10 +14,14 @@ import 'memberlist.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'Ranking/roomRanking.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
 // Project imports:
 import 'constants.dart';
 import 'media.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 class LivePage extends StatefulWidget {
   final String roomID;
@@ -38,6 +43,7 @@ class LivePage extends StatefulWidget {
 }
 
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
+  bool _isMinimized = false;
   bool _showCopySuccess = false;
   DateTime? _lastTapTime;
   DateTime? _lastBottomSheetTime;
@@ -49,6 +55,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   String? _voiceRoomName;
   String? _backgroundImageUrl;
   String? _language;
+  int?  _voiceroomid;
   static const String POCKETBASE_URL = 'http://145.223.21.62:8090'; // Replace with your actual PocketBase URL
 
   @override
@@ -310,7 +317,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     try {
       final uri = Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}')
           .replace(queryParameters: {
-        'fields': 'voice_room_name,background_images,group_photo',
+        'fields': 'voice_room_name,background_images,group_photo,voiceRoom_id'
       });
 
       final response = await http.get(
@@ -322,6 +329,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         final data = jsonDecode(response.body);
         setState(() {
           _voiceRoomName = data['voice_room_name'];
+          _voiceroomid = data['voiceRoom_id'];
           if (data['background_images'] != null) {
             _backgroundImageUrl = '$POCKETBASE_URL/api/files/voiceRooms/${widget.roomID}/${data['background_images']}';
             _groupPhotoUrl = '$POCKETBASE_URL/api/files/voiceRooms/${widget.roomID}/${data['group_photo']}';
@@ -339,7 +347,43 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       print('Error fetching voice room details: $e');
     }
   }
+  Future<void> _shareToWhatsApp() async {
+    final String shareText = 'Join our voice room!\nRoom Name: ${_voiceRoomName ?? "Voice Room"}\nRoom ID: ${_voiceroomid}\nCome join us for an amazing conversation!';
+    final Uri whatsappUrl = Uri.parse("whatsapp://send?text=${Uri.encodeComponent(shareText)}");
 
+    try {
+      await launchUrl(whatsappUrl);
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('WhatsApp is not installed')),
+      );
+    }
+  }
+
+  Future<void> _shareToFacebook() async {
+    final String shareText = 'Join our voice room!\nRoom Name: ${_voiceRoomName ?? "Voice Room"}\nRoom ID: ${_voiceroomid}\nCome join us for an amazing conversation!';
+    final Uri fbUrl = Uri.parse("https://www.facebook.com/sharer/sharer.php?u=${Uri.encodeComponent(shareText)}");
+
+    try {
+      await launchUrl(fbUrl, mode: LaunchMode.externalApplication);
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open Facebook')),
+      );
+    }
+  }
+
+  void _copyRoomLink() {
+    final String shareText = 'Join our voice room!\nRoom Name: ${_voiceRoomName ?? "Voice Room"}\nRoom ID: ${_voiceroomid}\nCome join us for an amazing conversation!';
+    Clipboard.setData(ClipboardData(text: shareText)).then((_) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Room link copied to clipboard')),
+      );
+    });
+  }
 
   Future<void> _fetchLanguageDetails(String roomId) async {
     try {
@@ -424,24 +468,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   @override
   void dispose() {
+    // Only cleanup if not minimized
+    if (!_isMinimized) {
+      ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
+      ZegoGiftManager().service.uninit();
+      _controller.dispose();
 
-    ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
-    ZegoGiftManager().service.uninit();
+      if (_onlineUserRecordId != null) {
+        http.delete(
+          Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
+          headers: {'Content-Type': 'application/json'},
+        ).catchError((e) => print('Error cleaning up online user record: $e'));
+      }
 
-    _controller.dispose();
-
-    if (_onlineUserRecordId != null) {
-      http.delete(
-        Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
-        headers: {'Content-Type': 'application/json'},
-      ).catchError((e) => print('Error cleaning up online user record: $e'));
-
+      updateEndTime(widget.userId, widget.roomID);
     }
 
-    updateEndTime(widget.userId, widget.roomID);
-
     super.dispose();
-
   }
 
   bool isAttributeHost(Map<String, String>? userInRoomAttributes) {
@@ -541,62 +584,89 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     return WillPopScope(
       onWillPop: () async {
         if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
+          setState(() {
+            _isMinimized = true;
+          });
+          ZegoUIKitPrebuiltLiveAudioRoomController()
+              .minimize
+              .minimize(navigatorKey.currentState!.context);
           return true;
+
         }
+
 
         // Show minimize option dialog
         bool? shouldPop = await showDialog<bool>(
           context: context,
           builder: (context) => Dialog(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(15),
             ),
             backgroundColor: Colors.white,
-            child: Container(
+            child: Padding(
               padding: EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Title
                   Text(
                     'Leave Room',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: Colors.black,
                     ),
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 12),
+
+                  // Message
                   Text(
                     'Would you like to minimize or leave the room?',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.grey[700],
+                      color: Colors.grey[600],
+                      height: 1.5,
                     ),
                   ),
-                  SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  SizedBox(height: 20),
+
+                  // Divider for iOS-like separation
+                  Divider(height: 1, color: Colors.grey[300]),
+
+                  // Action Buttons
+                  Column(
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: Text('Cancel'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(fontSize: 16),
+                        ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          ZegoUIKitPrebuiltLiveAudioRoomController()
-                              .minimize;
-                          Navigator.pop(context, false);
-                        },
-                        child: Text('Minimize'),
-                      ),
+                      Divider(height: 1, color: Colors.grey[300]),
                       TextButton(
                         onPressed: () async {
                           await _handleLogout();
                           Navigator.pop(context, true);
                         },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+                          ),
+                        ),
                         child: Text(
                           'Leave',
-                          style: TextStyle(color: Colors.red),
+                          style: TextStyle(fontSize: 16),
                         ),
                       ),
                     ],
@@ -606,6 +676,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             ),
           ),
         );
+
 
         return shouldPop ?? false;
       },
@@ -620,7 +691,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               userName: widget.username1,
               roomID: widget.roomID,
               events: events,
-              config: config,
+              config: config..userAvatarUrl = _groupPhotoUrl,
             ),
 
             // Power/Logout button
@@ -639,6 +710,28 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   child: Center(
                     child: Icon(
                       Icons.power_settings_new,
+                      color: Colors.white.withOpacity(0.9),
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 55,
+              child: GestureDetector(
+                onTap: () => _showShareOptions(context),
+                child: Container(
+                  width: 35,
+                  height: 35,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.share,
                       color: Colors.white.withOpacity(0.9),
                       size: 19,
                     ),
@@ -819,6 +912,105 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showShareOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.9),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Share via',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildShareButton(
+                    iconData: Icons.snapchat,
+                    label: 'WhatsApp',
+                    onTap: () => _shareToWhatsApp(),
+                    color: Color(0xFF25D366),
+                  ),
+                  _buildShareButton(
+                    iconData: Icons.facebook,
+                    label: 'Facebook',
+                    onTap: () => _shareToFacebook(),
+                    color: Color(0xFF1877F2),
+                  ),
+                  _buildShareButton(
+                    iconData: Icons.copy,
+                    label: 'Copy Link',
+                    onTap: () => _copyRoomLink(),
+                    color: Colors.grey[700]!,
+                  ),
+                ],
+              ),
+              SizedBox(height: 30),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShareButton({
+    required IconData iconData,
+    required String label,
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.3),
+                  spreadRadius: 2,
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              iconData,
+              color: Colors.white,
+              size: 37,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1777,12 +1969,36 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ZegoUIKitUser? user,
       Map<String, dynamic> extraInfo,
       ) {
-    return CircleAvatar(
-      maxRadius: size.width,
-      //backgroundImage: Image.asset("assets/avatars/avatar_${((int.tryParse(user?.id ?? "") ?? 0) % 6)}.png").image,
-      backgroundImage: Image.network(_userAvatarUrl!).image,
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white,
+          width: 2,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size.width / 2),
+        child: _groupPhotoUrl != null
+            ? CachedNetworkImage(
+          imageUrl: _groupPhotoUrl!,
+          width: size.width,
+          height: size.width,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => CircularProgressIndicator(),
+          errorWidget: (context, url, error) => Icon(Icons.error),
+        )
+            : Container(
+          width: size.width,
+          height: size.width,
+          color: Colors.grey[300],
+          child: Icon(Icons.group, color: Colors.grey[400]),
+        ),
+      ),
     );
   }
+
+
 
   int getHostSeatIndex() {
     if (widget.layoutMode == LayoutMode.hostCenter) {
@@ -2104,5 +2320,4 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     ));
   }
 }
-
 
