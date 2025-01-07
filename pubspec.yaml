@@ -159,6 +159,8 @@ flutter:
     - assets/images/badge_2.png
     - assets/images/badge_3.png
     - assets/images/badge_4.png
+    - assets/images/facebook.jpg
+    - assets/images/whatsapp.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

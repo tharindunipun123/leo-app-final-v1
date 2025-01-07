@@ -161,6 +161,8 @@ class GlobalRanking extends StatefulWidget {
 }
 
 class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProviderStateMixin {
+
+  String refreshMessage = '';
   late TabController _timeTabController;
   String currentCategory = 'TopRooms'; // Default category
   Map<String, double> diamondAmounts = {};
@@ -172,7 +174,16 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
   void initState() {
     super.initState();
     _timeTabController = TabController(length: 3, vsync: this);
+    _timeTabController.addListener(_handleTabChange);
+    _updateRefreshMessage(); // Initialize the message
     _loadGiftDiamondAmounts();
+  }
+
+
+  void _handleTabChange() {
+    if (_timeTabController.indexIsChanging) {
+      _updateRefreshMessage();
+    }
   }
 
   Future<void> _fetchGiftDiamondAmounts() async {
@@ -377,6 +388,38 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     }
   }
 
+  Widget _buildTimeMessage() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.orange.withOpacity(0.1),
+            Colors.red.withOpacity(0.1),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Text(
+        refreshMessage,
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey[600],
+          fontWeight: FontWeight.w500,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   Widget _buildRankingList(String timeFrame) {
 
     if (isLoading) {
@@ -547,12 +590,19 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
   Widget _buildSelectedCategory() {
     switch (currentCategory) {
       case 'TopRooms':
-        return TabBarView(
-          controller: _timeTabController,
+        return Column(
           children: [
-            _buildRankingList('Daily'),
-            _buildRankingList('Weekly'),
-            _buildRankingList('Monthly'),
+            _buildTimeMessage(),
+            Expanded(
+              child: TabBarView(
+                controller: _timeTabController,
+                children: [
+                  _buildRankingList('Daily'),
+                  _buildRankingList('Weekly'),
+                  _buildRankingList('Monthly'),
+                ],
+              ),
+            ),
           ],
         );
       case 'TopGifters':
@@ -560,17 +610,48 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
       case 'TopStars':
         return Topstar();
       case 'Billionaires':
-        return RechargeRankings(); // Just return the widget directly
+        return RechargeRankings();
       default:
-        return TabBarView(
-          controller: _timeTabController,
-          children: [
-            _buildRankingList('Daily'),
-            _buildRankingList('Weekly'),
-            _buildRankingList('Monthly'),
-          ],
+        return Center(
+          child: Text(
+            'Category not found',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
         );
     }
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      child: TabBar(
+        controller: _timeTabController,
+        labelColor: Colors.blue,
+        unselectedLabelColor: Colors.grey,
+        tabs: const [
+          Tab(text: 'Today'),
+          Tab(text: 'This Week'),
+          Tab(text: 'This Month'),
+        ],
+      ),
+    );
+  }
+
+
+
+  void _updateRefreshMessage() {
+    setState(() {
+      switch (_timeTabController.index) {
+        case 0:
+          refreshMessage = 'This ranking will refresh every day at 00:00 (GMT+5:30)';
+          break;
+        case 1:
+          refreshMessage = 'This ranking will refresh every Sunday at 00:00 (GMT+5:30)';
+          break;
+        case 2:
+          refreshMessage = 'This ranking will refresh at the end of every month (GMT+5:30)';
+          break;
+      }
+    });
   }
 
   Widget _buildCategoryButton(String title, List<Color> gradientColors, String category) {
@@ -618,7 +699,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     );
   }
 
-  @override
+
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +709,13 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Ranking'),
+        title: const Text(
+          'Ranking',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
@@ -636,10 +723,6 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
             onSelected: (value) {
               if (value == 'rewards') {
                 showRankingRewardPopup(context);
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(builder: (context) => const RewardsPage()),
-                // );
               } else if (value == 'rules') {
                 Navigator.push(
                   context,
@@ -661,55 +744,88 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Category buttons row
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildCategoryButton(
-                  'Top Rooms',
-                  [const Color(0xFFFF8C00).withOpacity(0.95), const Color(0xFFDC143C).withOpacity(0.90)],
-                  'TopRooms',
-                ),
-                const SizedBox(width: 8),
-                _buildCategoryButton(
-                  'Top Gifters',
-                  [const Color(0xFF9370DB).withOpacity(0.95), const Color(0xFF4B0082).withOpacity(0.90)],
-                  'TopGifters',
-                ),
-                const SizedBox(width: 8),
-                _buildCategoryButton(
-                  'Top Stars',
-                  [const Color(0xFF3CB371).withOpacity(0.95), const Color(0xFF006400).withOpacity(0.90)],
-                  'TopStars',
-                ),
-                const SizedBox(width: 8),
-                _buildCategoryButton(
-                  'Top Recharger',
-                  [const Color(0xFF4682B4).withOpacity(0.95), const Color(0xFF0000CD).withOpacity(0.90)],
-                  'Billionaires',
-                ),
-              ],
+          Container(
+            height: 60,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildCategoryButton(
+                    'Top Rooms',
+                    [
+                      const Color(0xFFFF8C00).withOpacity(0.95),
+                      const Color(0xFFDC143C).withOpacity(0.90),
+                    ],
+                    'TopRooms',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildCategoryButton(
+                    'Top Gifters',
+                    [
+                      const Color(0xFF9370DB).withOpacity(0.95),
+                      const Color(0xFF4B0082).withOpacity(0.90),
+                    ],
+                    'TopGifters',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildCategoryButton(
+                    'Top Stars',
+                    [
+                      const Color(0xFF3CB371).withOpacity(0.95),
+                      const Color(0xFF006400).withOpacity(0.90),
+                    ],
+                    'TopStars',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildCategoryButton(
+                    'Top Recharger',
+                    [
+                      const Color(0xFF4682B4).withOpacity(0.95),
+                      const Color(0xFF0000CD).withOpacity(0.90),
+                    ],
+                    'Billionaires',
+                  ),
+                ],
+              ),
             ),
           ),
 
-          // Top Room Card - Moved here
+          // Top Room Card
           if (currentCategory == 'TopRooms' && lastWeekTopRoom != null)
             TopRoomCard(
               roomDetails: lastWeekTopRoom!['roomDetails'],
               totalAmount: lastWeekTopRoom!['total'],
             ),
 
-          // Only show TabBar for TopRooms category
+          // TabBar for TopRooms category
           if (currentCategory == 'TopRooms')
             Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.grey[300]!,
+                    width: 1,
+                  ),
+                ),
+              ),
               child: TabBar(
                 controller: _timeTabController,
                 labelColor: Colors.blue,
                 unselectedLabelColor: Colors.grey,
+                indicatorColor: Colors.blue,
+                labelStyle: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                unselectedLabelStyle: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
                 tabs: const [
                   Tab(text: 'Today'),
                   Tab(text: 'This Week'),
@@ -718,10 +834,18 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
               ),
             ),
 
+          // Loading indicator
+          if (isLoading)
+            Expanded(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
           // Content area
-          Expanded(
-            child: _buildSelectedCategory(),
-          ),
+          else
+            Expanded(
+              child: _buildSelectedCategory(),
+            ),
         ],
       ),
     );

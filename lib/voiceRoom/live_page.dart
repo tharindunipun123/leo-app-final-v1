@@ -595,81 +595,114 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         }
 
 
-        // Show minimize option dialog
         bool? shouldPop = await showDialog<bool>(
           context: context,
           builder: (context) => Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
             ),
-            backgroundColor: Colors.white,
+            backgroundColor: Colors.black.withOpacity(0.9),
             child: Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Title
-                  Text(
-                    'Leave Room',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  Padding(
+                    padding: EdgeInsets.only(top: 16, bottom: 8),
+                    child: Text(
+                      'Leave Room',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  SizedBox(height: 12),
 
                   // Message
-                  Text(
-                    'Would you like to minimize or leave the room?',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                      height: 1.5,
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    child: Text(
+                      'Would you like to leave the room?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.8),
+                        height: 1.3,
+                      ),
                     ),
                   ),
-                  SizedBox(height: 20),
 
-                  // Divider for iOS-like separation
-                  Divider(height: 1, color: Colors.grey[300]),
+                  SizedBox(height: 16),
+
+                  // Divider
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withOpacity(0.2),
+                  ),
 
                   // Action Buttons
-                  Column(
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.blue,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+                  IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        // Cancel Button
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(
+                                  bottomLeft: Radius.circular(15),
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 17,
+                                color: Colors.blueAccent,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(fontSize: 16),
+
+                        // Vertical Divider
+                        VerticalDivider(
+                          width: 1,
+                          color: Colors.white.withOpacity(0.2),
                         ),
-                      ),
-                      Divider(height: 1, color: Colors.grey[300]),
-                      TextButton(
-                        onPressed: () async {
-                          await _handleLogout();
-                          Navigator.pop(context, true);
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+
+                        // Leave Button
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () async {
+                              await _handleLogout();
+                              Navigator.pop(context, true);
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(
+                                  bottomRight: Radius.circular(15),
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              'Leave',
+                              style: TextStyle(
+                                fontSize: 17,
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          'Leave',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -696,7 +729,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
             // Power/Logout button
             Positioned(
-              top: MediaQuery.of(context).padding.top + 10,
+              top: MediaQuery.of(context).padding.top + 2,
               right: 10,
               child: GestureDetector(
                 onTap: () => _showLogoutDialog(context),
@@ -718,7 +751,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               ),
             ),
             Positioned(
-              top: MediaQuery.of(context).padding.top + 10,
+              top: MediaQuery.of(context).padding.top + 2,
               right: 55,
               child: GestureDetector(
                 onTap: () => _showShareOptions(context),
@@ -741,40 +774,21 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             ),
 
             // Room Info Overlay
+            // Room Info Overlay
             Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              left: 55,
+              top: MediaQuery.of(context).padding.top - 15, // Moved higher up
+              left: 10,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return Container(
                     constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.3,
-                      minHeight: 40,
-                      maxHeight: 50,
+                      maxWidth: MediaQuery.of(context).size.width * 0.7,
+                      minHeight: 60,
+                      maxHeight: 60,
                     ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.blueAccent.withOpacity(0.7),
-                          Colors.lightBlueAccent.withOpacity(0.7)
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 5,
-                          offset: Offset(0, 2),
-                        )
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // Room Image
                         GestureDetector(
@@ -788,11 +802,14 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                             _showBottomSheet(context, widget.roomID);
                           },
                           child: Container(
-                            width: 30,
-                            height: 30,
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white30, width: 1),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.2),
+                                width: 1,
+                              ),
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(10),
@@ -800,34 +817,74 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                   ? Image.network(
                                 _groupPhotoUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Icon(
-                                  Icons.image,
-                                  size: 20,
-                                  color: Colors.white54,
+                                errorBuilder: (context, error, stackTrace) => Center(
+                                  child: Icon(
+                                    Icons.image,
+                                    size: 24,
+                                    color: Colors.white70,
+                                  ),
                                 ),
                               )
-                                  : Icon(
-                                Icons.image,
-                                size: 20,
-                                color: Colors.white54,
+                                  : Center(
+                                child: Icon(
+                                  Icons.image,
+                                  size: 24,
+                                  color: Colors.white70,
+                                ),
                               ),
                             ),
                           ),
                         ),
 
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
 
-                        // Room Name
-                        Flexible(
-                          child: Text(
-                            _voiceRoomName ?? "Voice Room",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        // Room Info Column
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Room Name
+                              Text(
+                                _voiceRoomName ?? "Voice Room",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+
+                              const SizedBox(height: 4),
+
+                              // Room ID
+                              Row(
+                                children: [
+                                  Text(
+                                    "ID: ",
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.7),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      "${_voiceroomid}",
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -836,6 +893,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 },
               ),
             ),
+
 
             // Ranking Overlay
             Positioned(
@@ -858,8 +916,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Color(0xFF8B4513),
-                        Color(0xFFDAA520),
+                        Colors.black.withOpacity(0.8),
+                        Colors.black.withOpacity(0.8),
                       ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
@@ -943,22 +1001,23 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildShareButton(
-                    iconData: Icons.snapchat,
+                    imageUrl: 'https://logodownload.org/wp-content/uploads/2015/04/whatsapp-logo-1.png',
                     label: 'WhatsApp',
                     onTap: () => _shareToWhatsApp(),
                     color: Color(0xFF25D366),
                   ),
                   _buildShareButton(
-                    iconData: Icons.facebook,
+                    imageUrl: 'https://brandpalettes.com/wp-content/uploads/2018/05/Facebook-Logo-JPG.jpg',
                     label: 'Facebook',
                     onTap: () => _shareToFacebook(),
                     color: Color(0xFF1877F2),
                   ),
                   _buildShareButton(
-                    iconData: Icons.copy,
+                    icon: Icons.copy,
                     label: 'Copy Link',
                     onTap: () => _copyRoomLink(),
                     color: Colors.grey[700]!,
+                    isIconButton: true,
                   ),
                 ],
               ),
@@ -971,10 +1030,12 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   Widget _buildShareButton({
-    required IconData iconData,
+    String? imageUrl,
+    IconData? icon,
     required String label,
     required VoidCallback onTap,
     required Color color,
+    bool isIconButton = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -996,10 +1057,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ],
             ),
-            child: Icon(
-              iconData,
-              color: Colors.white,
-              size: 37,
+            child: Center(
+              child: isIconButton
+                  ? Icon(icon, color: Colors.white, size: 30)
+                  : ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: Image.network(
+                  imageUrl!,
+                  width: 45,
+                  height: 45,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    Icons.error,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
           SizedBox(height: 8),
@@ -1759,9 +1842,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ..mediaPlayer.supportTransparent = true
       ..foreground = giftForeground()
       ..emptyAreaBuilder = mediaPlayer
-      ..topMenuBar.buttons = [
-        ZegoLiveAudioRoomMenuBarButtonName.minimizingButton, // Keep only this button
-      ]
+      // ..topMenuBar.buttons = [
+      //   ZegoLiveAudioRoomMenuBarButtonName.minimizingButton, // Keep only this button
+      // ]
       ..userAvatarUrl = _userAvatarUrl;
   }
 

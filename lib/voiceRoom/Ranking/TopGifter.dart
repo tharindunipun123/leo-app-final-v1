@@ -439,6 +439,7 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
 
 
 
+
   @override
   Widget build(BuildContext context) {
     // Change from Container to Scaffold for full page
@@ -483,6 +484,8 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
     );
 
   }
+
+
 
   Widget _buildRankingList(List<Map<String, dynamic>> rankings) {
     return Column(
