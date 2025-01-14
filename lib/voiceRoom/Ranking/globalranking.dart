@@ -700,7 +700,6 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
   }
 
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

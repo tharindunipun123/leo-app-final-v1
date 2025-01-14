@@ -591,9 +591,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               .minimize
               .minimize(navigatorKey.currentState!.context);
           return true;
-
         }
-
 
         bool? shouldPop = await showDialog<bool>(
           context: context,
@@ -675,6 +673,39 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                           color: Colors.white.withOpacity(0.2),
                         ),
 
+                        // Minimize Button
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () {
+                              // setState(() {
+                              //   _isMinimized = true;
+                              // });
+                              // ZegoUIKitPrebuiltLiveAudioRoomController()
+                              //     .minimize
+                              //     .minimize(navigatorKey.currentState!.context);
+                              // Navigator.pop(context, false);
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Minimize',
+                              style: TextStyle(
+                                fontSize: 17,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // Vertical Divider
+                        VerticalDivider(
+                          width: 1,
+                          color: Colors.white.withOpacity(0.2),
+                        ),
+
                         // Leave Button
                         Expanded(
                           child: TextButton(
@@ -710,7 +741,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           ),
         );
 
-
         return shouldPop ?? false;
       },
       child: SafeArea(
@@ -724,7 +754,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               userName: widget.username1,
               roomID: widget.roomID,
               events: events,
-              config: config..userAvatarUrl = _groupPhotoUrl,
+              config: config,
             ),
 
             // Power/Logout button
@@ -773,7 +803,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               ),
             ),
 
-            // Room Info Overlay
+
             // Room Info Overlay
             Positioned(
               top: MediaQuery.of(context).padding.top - 15, // Moved higher up
@@ -782,11 +812,21 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 builder: (context, constraints) {
                   return Container(
                     constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.7,
+                      maxWidth: MediaQuery.of(context).size.width * 0.5,
                       minHeight: 60,
                       maxHeight: 60,
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.grey.withOpacity(0.2),
+                          Colors.grey.withOpacity(0.1),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -897,7 +937,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
             // Ranking Overlay
             Positioned(
-              top: MediaQuery.of(context).padding.top + 95,
+              top: MediaQuery.of(context).padding.top + 65,
               left: 0,
               child: GestureDetector(
                 onTap: () {
@@ -1153,7 +1193,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                     ),
                     SizedBox(height: 10),
                     Text(
-                      'Logout',
+                      'Leave',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -1205,7 +1245,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                     ),
                     SizedBox(height: 10),
                     Text(
-                      'Cancel',
+                      'keep',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -2062,9 +2102,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size.width / 2),
-        child: _groupPhotoUrl != null
+        child: _userAvatarUrl != null
             ? CachedNetworkImage(
-          imageUrl: _groupPhotoUrl!,
+          imageUrl: _userAvatarUrl!,
           width: size.width,
           height: size.width,
           fit: BoxFit.cover,
