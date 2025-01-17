@@ -39,7 +39,7 @@ class PolicyPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,style: TextStyle(color: Colors.black,fontWeight: FontWeight.bold,fontSize: 20),
+                        title,style: TextStyle(color: Colors.black,fontWeight: FontWeight.bold,fontSize: 20 ),
                       ),
                       const SizedBox(height: 8),
                       Text(

@@ -23,6 +23,24 @@ import 'media.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
+class OnlineUser {
+  final String id;
+  final String name;
+  final String avatarUrl;
+  final String motto;
+  final String firstName;
+  final String lastName;
+
+  OnlineUser({
+    required this.id,
+    required this.name,
+    required this.avatarUrl,
+    required this.motto,
+    this.firstName = '',
+    this.lastName = '',
+  });
+}
+
 class LivePage extends StatefulWidget {
   final String roomID;
   final bool isHost;
@@ -43,6 +61,8 @@ class LivePage extends StatefulWidget {
 }
 
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
+  List<OnlineUser> onlineUsers = [];
+  bool isLoadingUsers = false;
   bool _isMinimized = false;
   bool _showCopySuccess = false;
   DateTime? _lastTapTime;
@@ -61,6 +81,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
+    _fetchOnlineUsers();
     ZegoGiftManager().cache.cacheAllFiles(giftItemList);
     ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
 
@@ -104,6 +125,61 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           count: 1
       ));
     });
+  }
+
+
+  Future<void> _fetchOnlineUsers() async {
+    if (mounted) {
+      setState(() => isLoadingUsers = true);
+    }
+
+    try {
+      // 1. First fetch all online users for this room
+      final onlineUsersResponse = await http.get(
+        Uri.parse('$POCKETBASE_URL/api/collections/online_users/records')
+            .replace(queryParameters: {
+          'filter': 'id="${widget.roomID}"',
+        }),
+      );
+
+      if (onlineUsersResponse.statusCode != 200) throw Exception('Failed to fetch online users');
+
+      final onlineUsersData = json.decode(onlineUsersResponse.body);
+      List<OnlineUser> users = [];
+
+      // 2. For each online user, fetch their details
+      for (var onlineUser in onlineUsersData['items']) {
+        if (onlineUser['userId'] == widget.userId) continue; // Skip current user
+
+        final userDetailsResponse = await http.get(
+          Uri.parse('$POCKETBASE_URL/api/collections/users/records/${onlineUser['userId']}'),
+        );
+
+        if (userDetailsResponse.statusCode == 200) {
+          final userData = json.decode(userDetailsResponse.body);
+          users.add(OnlineUser(
+            id: userData['id'],
+            name: '${userData['firstname']} ${userData['lastname']}'.trim(),
+            avatarUrl: '$POCKETBASE_URL/api/files/${userData['collectionId']}/${userData['id']}/${userData['avatar']}',
+            motto: userData['moto'] ?? '',
+            firstName: userData['firstname'] ?? '',
+            lastName: userData['lastname'] ?? '',
+          ));
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          onlineUsers = users;
+          isLoadingUsers = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching online users: $e');
+      if (mounted) {
+        setState(() => isLoadingUsers = false);
+      }
+    }
   }
 
 
@@ -780,6 +856,67 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
+            // Add this inside your Stack widget in the build method, after the logout button
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 45,
+              right: 10,
+              child: GestureDetector(
+                onTap: () {
+                  _fetchOnlineUsers().then((_) {
+                    _showOnlineUsersBottomSheet(context);
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      if (isLoadingUsers)
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      else ...[
+                        ...onlineUsers.take(2).map((user) => Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundImage: NetworkImage(user.avatarUrl),
+                            onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+                          ),
+                        )),
+                        if (onlineUsers.length > 2)
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '+${onlineUsers.length - 2}',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
             Positioned(
               top: MediaQuery.of(context).padding.top + 2,
               right: 55,
@@ -1001,6 +1138,117 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                           Icons.emoji_events,
                           color: Colors.amber[100],
                           size: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showOnlineUsersBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.9),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Container(
+              width: 40,
+              height: 4,
+              margin: EdgeInsets.only(top: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Online Users (${onlineUsers.length})',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // User list
+            Expanded(
+              child: ListView.separated(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                itemCount: onlineUsers.length,
+                separatorBuilder: (context, index) => Divider(
+                  color: Colors.white.withOpacity(0.1),
+                  height: 1,
+                ),
+                itemBuilder: (context, index) => Container(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      // Number
+                      Container(
+                        width: 30,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      // Avatar
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundImage: NetworkImage(onlineUsers[index].avatarUrl),
+                        onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+                      ),
+                      SizedBox(width: 12),
+                      // Name and motto
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              onlineUsers[index].name,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (onlineUsers[index].motto.isNotEmpty)
+                              Text(
+                                onlineUsers[index].motto,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
