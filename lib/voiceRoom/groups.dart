@@ -58,7 +58,7 @@ class GroupsScreen extends StatefulWidget {
   _GroupsScreenState createState() => _GroupsScreenState();
 }
 
-class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
+class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _isInitialMineLoad = true;
   String? _selectedCountry;
   bool _showCountryDialog = false;
@@ -120,13 +120,25 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_handleTabChange);
     _loadUserData();
-    _fetchMineVoiceRooms();
-    _fetchVoiceRooms();
+    _fetchVoiceRooms(); // Initial fetch
+    _fetchMineVoiceRooms(); // Initial fetch
     _fetchTagPhotos();
+
+    // Add listener for lifecycle changes to handle refresh
+    WidgetsBinding.instance.addObserver(this);
 
     _searchController.addListener(_onSearchChanged);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh when returning to this screen
+    if (ModalRoute.of(context)?.isCurrent ?? false) {
+      _fetchVoiceRooms();
+      _fetchMineVoiceRooms();
+    }
+  }
   void _onSearchChanged() {
     setState(() {
       _searchQuery = _searchController.text.toLowerCase();
@@ -1466,10 +1478,10 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
   }
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
-    _fetchTagPhotos();
     super.dispose();
   }
 }

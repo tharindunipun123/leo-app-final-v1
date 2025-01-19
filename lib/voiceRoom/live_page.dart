@@ -79,7 +79,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   int reconnectAttempts = 0;
   static const maxReconnectAttempts = 5;
 
-
+  bool isAdmin = false;
   List<OnlineUser> onlineUsers = [];
   bool isLoadingUsers = false;
   bool _isMinimized = false;
@@ -102,6 +102,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     super.initState();
     _initializeSocket();
     _createOnlineUserRecord().then((_) => _fetchInitialUsers());
+    _checkAdminStatus();
     _fetchOnlineUsers();
     ZegoGiftManager().cache.cacheAllFiles(giftItemList);
     ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
@@ -147,6 +148,80 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ));
     });
   }
+
+  Future<void> _checkAdminStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}'),
+      );
+
+      if (response.statusCode == 200) {
+        final roomData = json.decode(response.body);
+        setState(() {
+          isAdmin = roomData['ownerId'] == widget.userId;
+        });
+      }
+    } catch (e) {
+      print('Error checking admin status: $e');
+    }
+  }
+
+// Add this method to handle group disbanding
+  Future<void> _disbandGroup() async {
+    try {
+      // First, remove all joined users
+      final joinedUsersResponse = await http.get(
+        Uri.parse('$POCKETBASE_URL/api/collections/joined_users/records?filter=(voice_room_id="${widget.roomID}")'),
+      );
+
+      if (joinedUsersResponse.statusCode == 200) {
+        final joinedUsers = json.decode(joinedUsersResponse.body)['items'] as List;
+
+        // Delete all joined user records
+        for (var user in joinedUsers) {
+          await http.delete(
+            Uri.parse('$POCKETBASE_URL/api/collections/joined_users/records/${user['id']}'),
+          );
+        }
+      }
+
+      // Then, delete the voice room
+      final deleteResponse = await http.delete(
+        Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}'),
+      );
+
+      if (deleteResponse.statusCode == 200) {
+        // Clean up and exit
+        await _handleLogout();
+
+        // Pop back to groups screen and refresh it
+        if (mounted) {
+          // Pop all screens until we reach the groups screen
+          Navigator.of(context).popUntil((route) {
+            return route.settings.name == '/groups' || route.isFirst;
+          });
+
+          // Notify groups screen to refresh
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Group disbanded successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error disbanding group: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to disband group')),
+        );
+      }
+    }
+  }
+
 
 
   void _initializeSocket() {
@@ -936,6 +1011,251 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
+  void _showSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: Colors.black.withOpacity(0.95),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with close button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Room Settings',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.white70),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+
+              Divider(color: Colors.white24, height: 32),
+
+              // Room Photo Setting
+              ListTile(
+                leading: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.photo_camera, color: Colors.blue[300]),
+                ),
+                title: Text(
+                  'Change Room Photo',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                subtitle: Text(
+                  'Update room profile picture',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                trailing: Icon(Icons.chevron_right, color: Colors.white54),
+                onTap: () => Navigator.pop(context),
+              ),
+
+              Divider(color: Colors.white12, indent: 56),
+
+              // Room Name Setting
+              ListTile(
+                leading: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.edit, color: Colors.green[300]),
+                ),
+                title: Text(
+                  'Edit Room Name',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                subtitle: Text(
+                  'Change room display name',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                trailing: Icon(Icons.chevron_right, color: Colors.white54),
+                onTap: () => Navigator.pop(context),
+              ),
+
+              Divider(color: Colors.white12, indent: 56),
+
+              // Background Setting
+              ListTile(
+                leading: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.wallpaper, color: Colors.purple[300]),
+                ),
+                title: Text(
+                  'Change Background',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                subtitle: Text(
+                  'Customize room background',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                trailing: Icon(Icons.chevron_right, color: Colors.white54),
+                onTap: () => Navigator.pop(context),
+              ),
+
+              SizedBox(height: 20),
+
+              // Danger Zone
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.red.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Danger Zone',
+                      style: TextStyle(
+                        color: Colors.red[300],
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDisbandConfirmation();
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_forever, color: Colors.red[400]),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Disband Group',
+                                  style: TextStyle(
+                                    color: Colors.red[400],
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'Permanently delete this room',
+                                  style: TextStyle(
+                                    color: Colors.red[200],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+// Add this method to show disband confirmation
+  void _showDisbandConfirmation() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        backgroundColor: Colors.black.withOpacity(0.9),
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red,
+                size: 48,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Disband Group',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Are you sure you want to disband this group? This action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                ),
+              ),
+              SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.blue),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context); // Close dialog
+                      await _disbandGroup(); // This will handle the navigation and refresh
+                    },
+                    child: Text(
+                      'Disband',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -1233,9 +1553,35 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
+
+            if (isAdmin)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 2,
+                right: MediaQuery.of(context).size.width * 0.132, // Responsive positioning
+                child: GestureDetector(
+                  onTap: _showSettingsDialog,
+                  child: Container(
+                    width: 35,
+                    height: 35,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.8),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.settings,
+                        color: Colors.white.withOpacity(0.9),
+                        size: 19,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Share button
             Positioned(
               top: MediaQuery.of(context).padding.top + 2,
-              right: 55,
+              right: isAdmin ? 100 : 55, // Adjust based on admin status
               child: GestureDetector(
                 onTap: () => _showShareOptions(context),
                 child: Container(
@@ -1255,6 +1601,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
+
+            // Settings button (for admin)
 
 
             // Room Info Overlay
