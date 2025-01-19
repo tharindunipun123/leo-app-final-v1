@@ -1,4 +1,6 @@
 // Flutter imports:
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import './gift/gift.dart';
@@ -15,6 +17,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'Ranking/roomRanking.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pocketbase/pocketbase.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/services.dart';
 
 // Project imports:
@@ -61,6 +66,20 @@ class LivePage extends StatefulWidget {
 }
 
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
+
+  final pb = PocketBase('http://145.223.21.62:8090');
+  late UnsubscribeFunc? _unsubscribe;
+  int userCount = 0; // Add this to track user count
+
+
+  late IO.Socket socket;
+  bool isConnecting = true;
+  bool isReconnecting = false;
+  Timer? reconnectionTimer;
+  int reconnectAttempts = 0;
+  static const maxReconnectAttempts = 5;
+
+
   List<OnlineUser> onlineUsers = [];
   bool isLoadingUsers = false;
   bool _isMinimized = false;
@@ -81,6 +100,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
+    _initializeSocket();
+    _createOnlineUserRecord().then((_) => _fetchInitialUsers());
     _fetchOnlineUsers();
     ZegoGiftManager().cache.cacheAllFiles(giftItemList);
     ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
@@ -128,17 +149,234 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
 
+  void _initializeSocket() {
+    socket = IO.io('http://145.223.21.62:3000', <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': true,
+      'reconnection': true,
+      'reconnectionDelay': 1000,
+      'reconnectionDelayMax': 5000,
+      'reconnectionAttempts': maxReconnectAttempts,
+    });
+
+    socket.onConnect((_) async {
+      print('Connected to Socket.IO server');
+      reconnectAttempts = 0;
+      isReconnecting = false;
+
+      if (mounted) {
+        setState(() {
+          isConnecting = false;
+        });
+      }
+
+      // Send full user details when joining
+      await _fetchAndSetUserAvatar(); // Make sure we have avatar URL
+
+      socket.emit('joinRoom', {
+        'roomId': widget.roomID,
+        'userId': widget.userId,
+        'userName': widget.username1,
+        'userAvatar': _userAvatarUrl,
+        'userMotto': '' // Add any other user details you want to track
+      });
+    });
+
+    socket.on('roomUpdate', (data) {
+      if (!mounted) return;
+
+      try {
+        final List<dynamic> usersList = data['users'] as List;
+        final users = usersList.map((userData) => OnlineUser(
+          id: userData['id'] as String,
+          name: userData['name'] as String,
+          avatarUrl: userData['avatarUrl'] as String,
+          motto: userData['motto'] as String? ?? '',
+        )).toList();
+
+        setState(() {
+          onlineUsers = users;
+          userCount = data['count'] as int;
+          isLoadingUsers = false;
+        });
+      } catch (e) {
+        print('Error processing room update: $e');
+      }
+    });
+
+    // Handle individual user join/leave events
+    socket.on('userJoined', (userData) {
+      if (!mounted) return;
+
+      try {
+        final newUser = OnlineUser(
+          id: userData['id'],
+          name: userData['name'],
+          avatarUrl: userData['avatarUrl'],
+          motto: userData['motto'] ?? '',
+        );
+
+        setState(() {
+          // Add user if not already in list
+          if (!onlineUsers.any((user) => user.id == newUser.id)) {
+            onlineUsers.add(newUser);
+            userCount = onlineUsers.length;
+          }
+        });
+      } catch (e) {
+        print('Error processing user join: $e');
+      }
+    });
+
+    socket.on('userLeft', (userData) {
+      if (!mounted) return;
+
+      setState(() {
+        onlineUsers.removeWhere((user) => user.id == userData['id']);
+        userCount = onlineUsers.length;
+      });
+    });
+
+    socket.connect();
+  }
+
+  void _handleReconnection() {
+    reconnectionTimer?.cancel();
+
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to reconnect. Please check your connection.'),
+            duration: Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () {
+                reconnectAttempts = 0;
+                socket.connect();
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    reconnectionTimer = Timer(Duration(seconds: 2), () {
+      reconnectAttempts++;
+      if (!socket.connected) {
+        socket.connect();
+      }
+    });
+  }
+
+  void _updateUserList(Map<String, dynamic> data) {
+    if (data['users'] != null) {
+      final List<dynamic> usersList = data['users'] as List;
+      final users = usersList.map((userData) => OnlineUser(
+        id: userData['id'] as String,
+        name: userData['name'] as String,
+        avatarUrl: userData['avatarUrl'] as String,
+        motto: userData['motto'] as String? ?? '',
+      )).toList();
+
+      setState(() {
+        onlineUsers = users;
+        userCount = data['count'] as int;
+      });
+    }
+  }
+
+  Future<void> _fetchInitialUsers() async {
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingUsers = true;
+    });
+
+    try {
+      // First try to get users from socket server
+      socket.emitWithAck('fetchUsers', {'roomId': widget.roomID}, ack: (data) {
+        if (data != null && mounted) {
+          _updateUserList(data);
+        }
+      });
+
+      // Fallback to HTTP if socket isn't connected
+      if (!socket.connected) {
+        final response = await http.get(
+          Uri.parse('http://145.223.21.62:3000/api/rooms/${widget.roomID}/users'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          _updateUserList(data);
+        }
+      }
+    } catch (e) {
+      print('Error fetching initial users: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingUsers = false;
+        });
+      }
+    }
+  }
+
+
+
+  Future<void> _handleNewOnlineUser(Map<String, dynamic> record) async {
+    if (record['userId'] == widget.userId) return; // Skip current user
+
+    try {
+      final userResponse = await http.get(
+        Uri.parse('$POCKETBASE_URL/api/collections/users/records/${record['userId']}'),
+      );
+
+      if (userResponse.statusCode == 200) {
+        final userData = jsonDecode(userResponse.body);
+        final newUser = OnlineUser(
+          id: userData['id'],
+          name: '${userData['firstname']} ${userData['lastname']}'.trim(),
+          avatarUrl: '$POCKETBASE_URL/api/files/${userData['collectionId']}/${userData['id']}/${userData['avatar']}',
+          motto: userData['moto'] ?? '',
+          firstName: userData['firstname'] ?? '',
+          lastName: userData['lastname'] ?? '',
+        );
+
+        if (mounted) {
+          setState(() {
+            onlineUsers = [...onlineUsers, newUser];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error handling new online user: $e');
+    }
+  }
+
+  void _handleUserLeft(Map<String, dynamic> record) {
+    if (mounted) {
+      setState(() {
+        onlineUsers.removeWhere((user) => user.id == record['userId']);
+      });
+    }
+  }
+
+
+
+
   Future<void> _fetchOnlineUsers() async {
     if (mounted) {
       setState(() => isLoadingUsers = true);
     }
 
     try {
-      // 1. First fetch all online users for this room
       final onlineUsersResponse = await http.get(
         Uri.parse('$POCKETBASE_URL/api/collections/online_users/records')
             .replace(queryParameters: {
-          'filter': 'id="${widget.roomID}"',
+          'filter': 'voiceRoomId="${widget.roomID}"',
         }),
       );
 
@@ -147,30 +385,34 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       final onlineUsersData = json.decode(onlineUsersResponse.body);
       List<OnlineUser> users = [];
 
-      // 2. For each online user, fetch their details
       for (var onlineUser in onlineUsersData['items']) {
-        if (onlineUser['userId'] == widget.userId) continue; // Skip current user
+        if (onlineUser['userId'] == widget.userId) continue;
 
-        final userDetailsResponse = await http.get(
-          Uri.parse('$POCKETBASE_URL/api/collections/users/records/${onlineUser['userId']}'),
-        );
+        try {
+          final userDetailsResponse = await http.get(
+            Uri.parse('$POCKETBASE_URL/api/collections/users/records/${onlineUser['userId']}'),
+          );
 
-        if (userDetailsResponse.statusCode == 200) {
-          final userData = json.decode(userDetailsResponse.body);
-          users.add(OnlineUser(
-            id: userData['id'],
-            name: '${userData['firstname']} ${userData['lastname']}'.trim(),
-            avatarUrl: '$POCKETBASE_URL/api/files/${userData['collectionId']}/${userData['id']}/${userData['avatar']}',
-            motto: userData['moto'] ?? '',
-            firstName: userData['firstname'] ?? '',
-            lastName: userData['lastname'] ?? '',
-          ));
+          if (userDetailsResponse.statusCode == 200) {
+            final userData = json.decode(userDetailsResponse.body);
+            users.add(OnlineUser(
+              id: userData['id'],
+              name: '${userData['firstname']} ${userData['lastname']}'.trim(),
+              avatarUrl: '$POCKETBASE_URL/api/files/${userData['collectionId']}/${userData['id']}/${userData['avatar']}',
+              motto: userData['moto'] ?? '',
+              firstName: userData['firstname'] ?? '',
+              lastName: userData['lastname'] ?? '',
+            ));
+          }
+        } catch (e) {
+          print('Error fetching user details: $e');
         }
       }
 
       if (mounted) {
         setState(() {
           onlineUsers = users;
+          userCount = users.length; // Update the count
           isLoadingUsers = false;
         });
       }
@@ -289,7 +531,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
 
 
-
   Future<void> _createOnlineUserRecord() async {
     try {
       final response = await http.post(
@@ -351,6 +592,32 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       }
     } catch (e) {
       print('Error fetching user avatar: $e');
+    }
+  }
+
+  Future<void> _joinRoom(String roomId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://145.223.21.62:8090/api/collections/joined_users/records'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'voice_room_id': roomId,
+          'userid': userId,
+          'admin_or_not': false,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully joined the room')),
+        );
+      }
+    } catch (e) {
+      print('Error joining room: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join room')),
+      );
     }
   }
 
@@ -544,6 +811,13 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   @override
   void dispose() {
+
+    reconnectionTimer?.cancel();
+    socket.emit('leaveRoom', {
+      'roomId': widget.roomID,
+      'userId': widget.userId,
+    });
+    socket.dispose();
     // Only cleanup if not minimized
     if (!_isMinimized) {
       ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
@@ -555,11 +829,19 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
           Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
           headers: {'Content-Type': 'application/json'},
         ).catchError((e) => print('Error cleaning up online user record: $e'));
+
+        socket.emit('leaveRoom', {
+          'roomId': widget.roomID,
+          'userId': widget.userId,
+        });
       }
 
       updateEndTime(widget.userId, widget.roomID);
+
     }
 
+
+    socket.disconnect();
     super.dispose();
   }
 
@@ -856,46 +1138,80 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
-            // Add this inside your Stack widget in the build method, after the logout button
+
+            // if (isConnecting)
+            //   Positioned(
+            //     top: MediaQuery.of(context).padding.top + 10,
+            //     right: 10,
+            //     child: Container(
+            //       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            //       decoration: BoxDecoration(
+            //         color: Colors.black54,
+            //         borderRadius: BorderRadius.circular(20),
+            //       ),
+            //       child: Row(
+            //         mainAxisSize: MainAxisSize.min,
+            //         children: [
+            //           SizedBox(
+            //             width: 12,
+            //             height: 12,
+            //             child: CircularProgressIndicator(
+            //               strokeWidth: 2,
+            //               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            //             ),
+            //           ),
+            //           SizedBox(width: 8),
+            //           Text(
+            //             'Connecting...',
+            //             style: TextStyle(
+            //               color: Colors.white,
+            //               fontSize: 12,
+            //             ),
+            //           ),
+            //         ],
+            //       ),
+            //     ),
+            //   ),
+
+            // Add a user count display
             Positioned(
-              top: MediaQuery.of(context).padding.top + 45,
+              top: MediaQuery.of(context).padding.top + 60,
               right: 10,
               child: GestureDetector(
                 onTap: () {
-                  _fetchOnlineUsers().then((_) {
-                    _showOnlineUsersBottomSheet(context);
-                  });
+                  _showOnlineUsersBottomSheet(context);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(15), // Reduced border radius
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min, // Make row as small as possible
                     children: [
                       if (isLoadingUsers)
                         SizedBox(
-                          width: 28,
-                          height: 28,
+                          width: 14, // Smaller loading indicator
+                          height: 14,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                            strokeWidth: 1.5, // Thinner stroke
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       else ...[
                         ...onlineUsers.take(2).map((user) => Padding(
-                          padding: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.only(right: 3), // Reduced padding
                           child: CircleAvatar(
-                            radius: 14,
+                            radius: 10, // Smaller avatar radius
                             backgroundImage: NetworkImage(user.avatarUrl),
                             onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
                           ),
                         )),
                         if (onlineUsers.length > 2)
                           Container(
-                            width: 28,
-                            height: 28,
+                            width: 14, // Smaller counter container
+                            height: 14,
                             decoration: BoxDecoration(
                               color: Colors.blue,
                               shape: BoxShape.circle,
@@ -905,7 +1221,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                 '+${onlineUsers.length - 2}',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 12,
+                                  fontSize: 8, // Smaller font size
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -1174,19 +1490,35 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Header
+
+            // Header with live count and connection status
             Padding(
               padding: EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Online Users (${onlineUsers.length})',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Online Users (${onlineUsers.length + 1})', // +1 for current user
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (isConnecting) ...[
+                        SizedBox(width: 8),
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   IconButton(
                     icon: Icon(Icons.close, color: Colors.white),
@@ -1196,63 +1528,188 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               ),
             ),
 
-            // User list
+            // Main content
             Expanded(
-              child: ListView.separated(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                itemCount: onlineUsers.length,
-                separatorBuilder: (context, index) => Divider(
-                  color: Colors.white.withOpacity(0.1),
-                  height: 1,
+              child: isLoadingUsers
+                  ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading users...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                itemBuilder: (context, index) => Container(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    children: [
-                      // Number
+              )
+                  : RefreshIndicator(
+                onRefresh: _fetchOnlineUsers,
+                color: Colors.white,
+                backgroundColor: Colors.blue,
+                child: ListView(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  physics: AlwaysScrollableScrollPhysics(),
+                  children: [
+                    // Current user (always shown first)
+                    if (_userAvatarUrl != null) ...[
                       Container(
-                        width: 30,
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      // Avatar
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundImage: NetworkImage(onlineUsers[index].avatarUrl),
-                        onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
-                      ),
-                      SizedBox(width: 12),
-                      // Name and motto
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
                           children: [
-                            Text(
-                              onlineUsers[index].name,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            Container(
+                              width: 30,
+                              child: Icon(
+                                Icons.star,
+                                color: Colors.amber,
+                                size: 20,
                               ),
                             ),
-                            if (onlineUsers[index].motto.isNotEmpty)
-                              Text(
-                                onlineUsers[index].motto,
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 14,
-                                ),
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundImage: NetworkImage(_userAvatarUrl!),
+                              onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        widget.username1,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      SizedBox(width: 8),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          'You',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
+                            ),
                           ],
                         ),
                       ),
+                      Divider(
+                        color: Colors.white.withOpacity(0.1),
+                        height: 1,
+                      ),
                     ],
-                  ),
+
+                    // Other online users
+                    ...onlineUsers.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final user = entry.value;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 30,
+                                  child: Text(
+                                    '${index + 2}', // +2 because current user is #1
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                CircleAvatar(
+                                  radius: 24,
+                                  backgroundImage: NetworkImage(user.avatarUrl),
+                                  onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        user.name,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (user.motto.isNotEmpty)
+                                        Text(
+                                          user.motto,
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (index < onlineUsers.length - 1)
+                            Divider(
+                              color: Colors.white.withOpacity(0.1),
+                              height: 1,
+                            ),
+                        ],
+                      );
+                    }).toList(),
+
+                    // Show message if no other users
+                    if (onlineUsers.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.people_outline,
+                                color: Colors.grey,
+                                size: 48,
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'No other users online',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1652,6 +2109,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                     child: TabBarView(
                       children: [
                         // Profile Tab
+                        // Inside your _showBottomSheet method, modify the Profile Tab content:
                         SingleChildScrollView(
                           child: Column(
                             children: [
@@ -1684,11 +2142,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                               ),
                               const SizedBox(height: 8),
                               // Room ID with copy icon
-                              // Room ID with copy icon
-                              // First, modify your Room ID section to use StatefulBuilder:
-                              // Inside your Room ID section in the bottom sheet:
                               StatefulBuilder(
-                                builder: (BuildContext context, StateSetter setModalState) {  // Change setState to setModalState
+                                builder: (BuildContext context, StateSetter setModalState) {
                                   return Column(
                                     children: [
                                       Row(
@@ -1704,12 +2159,12 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                           GestureDetector(
                                             onTap: () {
                                               Clipboard.setData(ClipboardData(text: roomData['voiceRoom_id'].toString()));
-                                              setModalState(() {  // Use setModalState instead of setState
-                                                _showCopySuccess = true;  // Use class variable
+                                              setModalState(() {
+                                                _showCopySuccess = true;
                                               });
                                               Future.delayed(Duration(seconds: 2), () {
                                                 if (mounted) {
-                                                  setModalState(() {  // Use setModalState
+                                                  setModalState(() {
                                                     _showCopySuccess = false;
                                                   });
                                                 }
@@ -1735,7 +2190,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                           ),
                                         ],
                                       ),
-                                      if (_showCopySuccess)  // Use class variable
+                                      if (_showCopySuccess)
                                         Padding(
                                           padding: EdgeInsets.only(top: 4),
                                           child: Text(
@@ -1746,7 +2201,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                             ),
                                           ),
                                         ),
-                                      const SizedBox(height: 24),
                                     ],
                                   );
                                 },
@@ -1766,6 +2220,29 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                                     _buildDetailRow('Members:', '$joinedUsersCount/500'),
                                     _buildRoomModeTags(roomData),
                                     _buildLanguageRow(),
+                                    // Add Join Button here
+                                    Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isUserJoined ? Colors.grey[400] : Colors.lightBlue,
+                                          minimumSize: Size(double.infinity, 50),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                          ),
+                                          elevation: isUserJoined ? 0 : 2,
+                                        ),
+                                        onPressed: isUserJoined ? null : () => _joinRoom(roomId, currentUserId),
+                                        child: Text(
+                                          isUserJoined ? 'Already Joined' : 'Join Room',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),

@@ -137,6 +137,28 @@ class _MemberListScreenState extends State<MemberListScreen> {
     }
   }
 
+  Future<void> _leaveRoom(String userId, String joinedUserId) async {
+    try {
+      // Delete from joined_users
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/collections/joined_users/records/$joinedUserId'),
+      );
+
+      if (response.statusCode == 200) {
+        Navigator.pop(context); // Close the bottom sheet
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully left the room')),
+        );
+      }
+    } catch (e) {
+      print('Error leaving room: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to leave room')),
+      );
+    }
+  }
+
+
   Future<void> _joinRoom(String roomId, String userId) async {
     try {
       final response = await http.post(
@@ -247,6 +269,9 @@ class _MemberListScreenState extends State<MemberListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isCurrentUserAdmin = adminIds.contains(widget.currentUserId);
+    final isCurrentUserOwner = widget.currentUserId == ownerId;
+
     return Column(
       children: [
         // Search and Settings Bar
@@ -273,6 +298,87 @@ class _MemberListScreenState extends State<MemberListScreen> {
                   ),
                 ),
               ),
+              // Leave Room Text with Three Dots Menu
+              if (widget.isJoined && !isCurrentUserAdmin && !isCurrentUserOwner)
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert),
+                  onSelected: (value) async {
+                    // Replace the leave logic section with this corrected version
+                    if (value == 'leave') {
+                      // Show confirmation dialog
+                      final shouldLeave = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text('Leave Room'),
+                          content: Text('Are you sure you want to leave this room?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context, true); // Close dialog
+                                Navigator.of(context, rootNavigator: true).pop(); // Close bottom sheet
+                              },
+                              child: Text('Leave', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (shouldLeave == true) {
+                        try {
+                          Map<String, dynamic>? currentUser;
+                          try {
+                            currentUser = usersList.firstWhere(
+                                  (user) => user['id'] == widget.currentUserId,
+                            );
+                          } catch (e) {
+                            currentUser = null;
+                          }
+
+                          if (currentUser != null) {
+                            final response = await http.delete(
+                              Uri.parse('$baseUrl/api/collections/joined_users/records/${currentUser['joinedUserId']}'),
+                            );
+
+                            if (response.statusCode == 200) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Successfully left the room'),
+                                  backgroundColor: Colors.red,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          print('Error leaving room: $e');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to leave room'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'leave',
+                      child: Row(
+
+                        children: [
+                          SizedBox(width: 8),
+                          Text('Leave Room', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               if (widget.currentUserId == ownerId)
                 IconButton(
                   icon: Icon(Icons.settings),
@@ -298,6 +404,8 @@ class _MemberListScreenState extends State<MemberListScreen> {
                 }
 
                 final isAdmin = user['isAdmin'] == true;
+                final isCurrentUser = widget.currentUserId == user['id'];
+                final isOwner = user['id'] == ownerId;
 
                 return Container(
                   height: 70,
@@ -374,7 +482,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
           ),
         ),
 
-        // Replace the current Positioned button with this:
+        // Empty container at bottom (previously join button)
         Container(
           padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           decoration: BoxDecoration(
@@ -386,25 +494,6 @@ class _MemberListScreenState extends State<MemberListScreen> {
                 offset: Offset(0, -5),
               ),
             ],
-          ),
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: widget.isJoined ? Colors.grey[400] : Colors.lightBlue,
-              minimumSize: Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
-              elevation: widget.isJoined ? 0 : 2,
-            ),
-            onPressed: widget.isJoined ? null : () => _joinRoom(widget.voiceRoomId, widget.currentUserId),
-            child: Text(
-              widget.isJoined ? 'Already Joined' : 'Join Room',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
           ),
         ),
       ],

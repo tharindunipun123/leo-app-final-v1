@@ -64,6 +64,8 @@ dependencies:
   pocketbase: ^0.11.0
   country_code_picker: ^3.1.0
   country_flags: ^1.0.0
+  web_socket_channel: ^2.4.0
+  socket_io_client: ^3.0.2
 
 
 
