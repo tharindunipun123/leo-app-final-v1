@@ -23,6 +23,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  int profileViewCount = 0;
   String? userId;
   Map<String, dynamic>? userProfile;
   List<Map<String, dynamic>>? gifts;
@@ -40,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (userId != null) {
       await Future.wait([
         _fetchUserProfile(),
+        _fetchProfileViews(),
         _fetchReceivedGifts(),
         _fetchUserBadges(),
       ]);
@@ -61,6 +63,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Error fetching profile: $e');
     }
   }
+
+  Future<void> _fetchProfileViews() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/collections/profileView/records?filter=(viewed_users_id="$userId")'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final viewsList = data['items'] as List;
+
+        if (mounted) {
+          setState(() {
+            profileViewCount = viewsList.length;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile views: $e');
+    }
+  }
+
+
 
   Future<void> _fetchReceivedGifts() async {
     try {
@@ -271,6 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
                     ),
                   ),
+                  _buildProfileViewsSection(),
                   _buildGiftsSection(),
                   _buildBadgesSection(),
                   //_buildVoiceRoomsSection(),
@@ -320,6 +346,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildProfileViewsSection() {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 15.w),
+      padding: EdgeInsets.symmetric(vertical: 12.w, horizontal: 15.w),
+      decoration: BoxDecoration(
+        color: darkModeEnabled ? Colors.grey[900] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Profile Views',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                  color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
+                ),
+              ),
+              SizedBox(height: 4.w),
+              Text(
+                'Total number of profile visits',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: darkModeEnabled ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.w),
+            decoration: BoxDecoration(
+              color: kPrimaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.visibility,
+                  size: 16.w,
+                  color: kPrimaryColor,
+                ),
+                SizedBox(width: 6.w),
+                Text(
+                  '$profileViewCount',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.bold,
+                    color: kPrimaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

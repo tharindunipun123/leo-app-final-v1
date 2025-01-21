@@ -21,6 +21,7 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/services.dart';
+import '../Account Section/edit profile/FriendsProfileView.dart';
 
 // Project imports:
 import 'constants.dart';
@@ -45,6 +46,7 @@ class OnlineUser {
     this.lastName = '',
   });
 }
+
 
 class LivePage extends StatefulWidget {
   final String roomID;
@@ -101,11 +103,12 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   void initState() {
     super.initState();
     _initializeSocket();
-    _createOnlineUserRecord().then((_) => _fetchInitialUsers());
+    _fetchInitialUsers();
+    //_createOnlineUserRecord().then((_) => _fetchInitialUsers());
     _checkAdminStatus();
     _fetchOnlineUsers();
-    ZegoGiftManager().cache.cacheAllFiles(giftItemList);
-    ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
+    // ZegoGiftManager().cache.cacheAllFiles(giftItemList);
+    // ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
 
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       ZegoGiftManager().service.init(
@@ -131,22 +134,22 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       lowerBound: 0.5,
       upperBound: 1.2,
     )..repeat(reverse: true);
-
-    _glowAnimation = Tween<double>(begin: 0.5, end: 1.2).animate(_controller);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Get crown gift data
-      final crownGift = giftItemList.firstWhere(
-              (gift) => gift.name == 'crown',  // Adjust name to match your gift
-          orElse: () => giftItemList.first
-      );
-
-      // Auto play the gift
-      ZegoGiftManager().playList.add(PlayData(
-          giftItem: crownGift,
-          count: 1
-      ));
-    });
+    //
+     _glowAnimation = Tween<double>(begin: 0.5, end: 1.2).animate(_controller);
+    //
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   // Get crown gift data
+    //   final crownGift = giftItemList.firstWhere(
+    //           (gift) => gift.name == 'crown',  // Adjust name to match your gift
+    //       orElse: () => giftItemList.first
+    //   );
+    //
+    //   // Auto play the gift
+    //   ZegoGiftManager().playList.add(PlayData(
+    //       giftItem: crownGift,
+    //       count: 1
+    //   ));
+    // });
   }
 
   Future<void> _checkAdminStatus() async {
@@ -221,7 +224,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       }
     }
   }
-
 
 
   void _initializeSocket() {
@@ -361,6 +363,67 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       });
     }
   }
+
+
+  Future<bool> checkAndRecordProfileView(String viewerUserId, String viewedUserId) async {
+    const String baseUrl = 'http://145.223.21.62:8090';
+
+    try {
+      // 1. Early return if viewer and viewed are the same user
+      if (viewerUserId == viewedUserId) {
+        return false;
+      }
+
+      // 2. Check for existing view with proper URL encoding
+      final queryFilter = '(viewer_user_id="${Uri.encodeComponent(viewerUserId)}" && viewed_users_id="${Uri.encodeComponent(viewedUserId)}")';
+      final checkResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/profileView/records').replace(
+            queryParameters: {'filter': queryFilter}
+        ),
+      );
+
+      if (checkResponse.statusCode != 200) {
+        print('Error checking existing view: ${checkResponse.statusCode}');
+        print('Response body: ${checkResponse.body}');
+        return false;
+      }
+
+      final existingViews = json.decode(checkResponse.body)['items'] as List;
+      if (existingViews.isNotEmpty) {
+        return true; // View already exists
+      }
+
+      // 3. Create new profile view record with proper headers
+      final createResponse = await http.post(
+        Uri.parse('$baseUrl/api/collections/profileView/records'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'viewer_user_id': viewerUserId,
+          'viewed_users_id': viewedUserId,
+        }),
+      );
+
+      // 4. Detailed error logging
+      print('Create profile view response status: ${createResponse.statusCode}');
+      print('Create profile view response body: ${createResponse.body}');
+
+      if (createResponse.statusCode != 200) {
+        final errorBody = json.decode(createResponse.body);
+        print('Error creating profile view: $errorBody');
+        return false;
+      }
+
+      return true;
+    } catch (e, stackTrace) {
+      print('Error in checkAndRecordProfileView: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
 
   Future<void> _fetchInitialUsers() async {
     if (!mounted) return;
@@ -696,40 +759,90 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
+  Future<void> _deleteDuplicateOnlineUserRecords(String userId, String roomId) async {
+    const String baseUrl = 'http://145.223.21.62:8090/api/collections/online_users/records';
+
+    try {
+      // Step 1: Fetch all records for this user and room
+      final filter = Uri.encodeComponent('userId="$userId" && voiceRoomId="$roomId"');
+      final response = await http.get(
+        Uri.parse('$baseUrl?filter=$filter'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final records = data['items'] as List;
+
+        if (records.isEmpty) {
+          print('No records found for user $userId in room $roomId');
+          return;
+        }
+
+        print('Found ${records.length} records to delete');
+
+        // Step 2: Delete all records found
+        for (var record in records) {
+          final recordId = record['id'];
+          final deleteResponse = await http.delete(
+            Uri.parse('$baseUrl/$recordId'),
+            headers: {'Content-Type': 'application/json'},
+          );
+
+          if (deleteResponse.statusCode == 204 || deleteResponse.statusCode == 200) {
+            print('Successfully deleted record: $recordId');
+          } else {
+            print('Failed to delete record $recordId: ${deleteResponse.statusCode}');
+          }
+        }
+      } else {
+        print('Failed to fetch records: ${response.statusCode}');
+        throw Exception('Failed to fetch online user records');
+      }
+    } catch (e) {
+      print('Error in _deleteDuplicateOnlineUserRecords: $e');
+      rethrow;
+    }
+  }
+
+// Modified _handleLogout function
   Future<void> _handleLogout() async {
     try {
-      // First uninitialize ZEGO services
-      ZegoGiftManager().service.uninit();
+      // First, clean up all duplicate records
+      await _deleteDuplicateOnlineUserRecords(widget.userId, widget.roomID);
 
-      // Leave the Zego room with proper cleanup
+      // Uninitialize ZEGO services
+      ZegoGiftManager().service.uninit();
       await ZegoUIKit().leaveRoom();
 
-      // Then delete the online user record
-      if (_onlineUserRecordId != null) {
-        updateEndTime(widget.userId, widget.roomID);
-        try {
-          await http.delete(
-            Uri.parse('$POCKETBASE_URL/api/collections/online_users/records/$_onlineUserRecordId'),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          );
-        } catch (e) {
-          print('Error deleting online user record: $e');
-        }
-      }
+      // Emit leave room event to socket
+      socket.emit('leaveRoom', {
+        'roomId': widget.roomID,
+        'userId': widget.userId,
+      });
 
-      // Finally navigate back
+      // Update end time for the session
+      await updateEndTime(widget.userId, widget.roomID);
+
+      // Disconnect socket
+      socket.disconnect();
+
+      // Finally, navigate back
       if (mounted) {
         Navigator.of(context).pop();
       }
     } catch (e) {
       print('Error during logout: $e');
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error during logout: $e')),
+        );
         Navigator.of(context).pop();
       }
     }
   }
+
+
 
   Future<void> _fetchVoiceRoomDetails() async {
     try {
@@ -1816,6 +1929,15 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   void _showOnlineUsersBottomSheet(BuildContext context) {
+    // Remove duplicates by user ID, excluding current user
+    final uniqueUsers = <String, OnlineUser>{};
+    for (var user in onlineUsers) {
+      if (user.id != widget.userId && !uniqueUsers.containsKey(user.id)) {
+        uniqueUsers[user.id] = user;
+      }
+    }
+    final deduplicatedUsers = uniqueUsers.values.toList();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1828,7 +1950,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         ),
         child: Column(
           children: [
-            // Handle
+            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -1839,7 +1961,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               ),
             ),
 
-            // Header with live count and connection status
+            // Header with user count
             Padding(
               padding: EdgeInsets.all(16),
               child: Row(
@@ -1848,7 +1970,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   Row(
                     children: [
                       Text(
-                        'Online Users (${onlineUsers.length + 1})', // +1 for current user
+                        'Online Users (${deduplicatedUsers.length + 1})',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -1876,27 +1998,10 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
               ),
             ),
 
-            // Main content
+            // User list
             Expanded(
               child: isLoadingUsers
-                  ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Loading users...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              )
+                  ? _buildLoadingIndicator()
                   : RefreshIndicator(
                 onRefresh: _fetchOnlineUsers,
                 color: Colors.white,
@@ -1905,65 +2010,17 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   physics: AlwaysScrollableScrollPhysics(),
                   children: [
-                    // Current user (always shown first)
+                    // Current user (always first)
                     if (_userAvatarUrl != null) ...[
-                      Container(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 30,
-                              child: Icon(
-                                Icons.star,
-                                color: Colors.amber,
-                                size: 20,
-                              ),
-                            ),
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundImage: NetworkImage(_userAvatarUrl!),
-                              onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        widget.username1,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue,
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: Text(
-                                          'You',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                      _buildUserListItem(
+                        OnlineUser(
+                          id: widget.userId,
+                          name: widget.username1,
+                          avatarUrl: _userAvatarUrl!,
+                          motto: '',
                         ),
+                        isCurrentUser: true,
+                        index: 1,
                       ),
                       Divider(
                         color: Colors.white.withOpacity(0.1),
@@ -1971,60 +2028,19 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                       ),
                     ],
 
-                    // Other online users
-                    ...onlineUsers.asMap().entries.map((entry) {
+                    // Other users
+                    ...deduplicatedUsers.asMap().entries.map((entry) {
                       final index = entry.key;
                       final user = entry.value;
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 30,
-                                  child: Text(
-                                    '${index + 2}', // +2 because current user is #1
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                                CircleAvatar(
-                                  radius: 24,
-                                  backgroundImage: NetworkImage(user.avatarUrl),
-                                  onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        user.name,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (user.motto.isNotEmpty)
-                                        Text(
-                                          user.motto,
-                                          style: TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
+                          _buildUserListItem(
+                            user,
+                            isCurrentUser: false,
+                            index: index + 2,
                           ),
-                          if (index < onlineUsers.length - 1)
+                          if (index < deduplicatedUsers.length - 1)
                             Divider(
                               color: Colors.white.withOpacity(0.1),
                               height: 1,
@@ -2033,30 +2049,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                       );
                     }).toList(),
 
-                    // Show message if no other users
-                    if (onlineUsers.isEmpty)
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.people_outline,
-                                color: Colors.grey,
-                                size: 48,
-                              ),
-                              SizedBox(height: 16),
-                              Text(
-                                'No other users online',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    // Empty state
+                    if (deduplicatedUsers.isEmpty)
+                      _buildEmptyState(),
                   ],
                 ),
               ),
@@ -2065,6 +2060,167 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         ),
       ),
     );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Loading users...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 32),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.people_outline,
+              color: Colors.grey,
+              size: 48,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No other users online',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserListItem(OnlineUser user, {required bool isCurrentUser, required int index}) {
+    return GestureDetector(
+      onTap: () => _handleUserTap(user, isCurrentUser),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            // Index/Star column
+            Container(
+              width: 30,
+              child: isCurrentUser
+                  ? Icon(Icons.star, color: Colors.amber, size: 20)
+                  : Text(
+                '$index',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            ),
+            // Avatar
+            GestureDetector(
+              onTap: () => _handleUserTap(user, isCurrentUser),
+              child: CircleAvatar(
+                radius: 24,
+                backgroundImage: NetworkImage(user.avatarUrl),
+                onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+              ),
+            ),
+            SizedBox(width: 12),
+            // User info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        user.name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (isCurrentUser) ...[
+                        SizedBox(width: 8),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'You',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (user.motto.isNotEmpty)
+                    Text(
+                      user.motto,
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Chevron icon for non-current users
+            if (!isCurrentUser)
+              GestureDetector(
+                onTap: () => _handleUserTap(user, isCurrentUser),
+                child: Icon(Icons.chevron_right, color: Colors.white54, size: 20),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleUserTap(OnlineUser user, bool isCurrentUser) async {
+    if (!isCurrentUser) {
+      try {
+        final canView = await checkAndRecordProfileView(widget.userId, user.id);
+
+        if (canView && mounted) {
+          Navigator.pop(context); // Close bottom sheet
+
+          showDialog(
+            context: context,
+            barrierDismissible: true,
+            barrierColor: Colors.black.withOpacity(0.85),
+            builder: (BuildContext context) {
+              return ProfileScreenView(
+                viewedUserId: user.id,
+                viewerUserId: widget.userId,
+              );
+            },
+          );
+        }
+      } catch (e) {
+        print('Error showing profile: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Unable to load profile')),
+          );
+        }
+      }
+    }
   }
 
   void _showShareOptions(BuildContext context) {
