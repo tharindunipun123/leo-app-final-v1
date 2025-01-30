@@ -1367,9 +1367,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     );
   }
 
-
-
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
