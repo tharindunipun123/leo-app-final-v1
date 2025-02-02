@@ -183,6 +183,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
+    _fetchDailyRankings();
     _updateRefreshMessage();
     _loadData();
   }

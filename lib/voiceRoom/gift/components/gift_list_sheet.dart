@@ -499,7 +499,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
     }
   }
 
-  // Future<void> _sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
+  // Future<void> sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
   //   try {
   //     if (!_validateGiftItem(giftItem)) {
   //       throw Exception('Invalid gift data');
@@ -511,7 +511,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
   //     if (await _checkAndUpdateBalance(totalCost)) {
   //       // Send to PocketBase first
   //       final response = await http.post(
-  //           Uri.parse('$pocketbaseUrl/api/collections/sending_recieving_gifts/records'),
+  //           Uri.parse('http://145.223.21.62:6003/api/gifts/send'),
   //           headers: {'Content-Type': 'application/json'},
   //           body: json.encode({
   //             'sender_user_id': loggedUserId,
@@ -563,61 +563,149 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
   // }
 
   Future<void> sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
+    // Create a key to manage snackbar
+    final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
     try {
+      if (!_validateGiftItem(giftItem)) {
+        throw Exception('Invalid gift data');
+      }
+
       final totalCost = giftItem.weight * count.toDouble();
+      final rewardAmount = totalCost * 0.4;
 
-      if (await _checkAndUpdateBalance(totalCost)) {
-        // Send to PocketBase
-        final response = await http.post(
-            Uri.parse('$pocketbaseUrl/api/collections/sending_recieving_gifts/records'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'sender_user_id': loggedUserId,
-              'reciever_user_id': receiver.id,
-              'gifts_url': giftItem.sourceURL,
-              'giftname': giftItem.name,
-              'gift_count': count,
-              'voiceRoomId': widget.roomId,
-            })
-        );
-
-        if (response.statusCode == 200) {
-          try {
-            await _handleGiftPlayback(giftItem, count);
-            if (mounted) {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Gift sent successfully!'))
-              );
-            }
-          } catch (e) {
-            print('Playback error: $e');
-            if (mounted) {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Gift sent but animation failed'))
-              );
-            }
-          }
-        } else {
-          throw Exception('Failed to send gift');
-        }
-      } else {
+      // Check balance first
+      if (!await _checkAndUpdateBalance(totalCost)) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Insufficient balance!'))
+          _showSnackBar('Insufficient balance!');
+        }
+        return;
+      }
+
+      // Close bottom sheet before playing animation
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Play animation first
+      try {
+        await _handleGiftPlayback(giftItem, count);
+      } catch (e) {
+        print('Animation error: $e');
+        if (mounted) {
+          _showSnackBar('Failed to play gift animation');
+        }
+        return;
+      }
+
+      // Send gift data to server after animation
+      final response = await http.post(
+          Uri.parse('http://145.223.21.62:6003/api/gifts/send'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'sender_user_id': loggedUserId,
+            'receiver_user_id': receiver.id,
+            'gifts_url': giftItem.sourceURL,
+            'giftname': giftItem.name,
+            'gift_count': count,
+            'voiceRoomId': widget.roomId
+          })
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        // Update receiver's wallet
+        await _updateReceiverWallet(receiver.id, rewardAmount);
+
+        if (mounted) {
+          // Show success message with delay to avoid overlap
+          Future.delayed(
+              const Duration(milliseconds: 500),
+                  () => _showSnackBar('Gift sent successfully!')
           );
         }
+      } else {
+        throw Exception('Failed to send gift');
       }
     } catch (e) {
       print('Error sending gift: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error sending gift: ${e.toString()}'))
-        );
+        _showSnackBar('Error sending gift: ${e.toString()}');
       }
     }
   }
+
+// Helper method to show snackbar
+  void _showSnackBar(String message) {
+    // Remove any existing snackbars
+    ScaffoldMessenger.of(context).clearSnackBars();
+
+    // Show new snackbar with duration
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Future<void> sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
+  //   try {
+  //     final totalCost = giftItem.weight * count.toDouble();
+  //
+  //     if (await _checkAndUpdateBalance(totalCost)) {
+  //       // Send to PocketBase
+  //       final response = await http.post(
+  //           Uri.parse('http://145.223.21.62:6003/api/gifts/send'),
+  //           headers: {'Content-Type': 'application/json'},
+  //           body: json.encode({
+  //             'sender_user_id': loggedUserId,
+  //             'reciever_user_id': receiver.id,
+  //             'gifts_url': giftItem.sourceURL,
+  //             'giftname': giftItem.name,
+  //             'gift_count': count,
+  //             'voiceRoomId': widget.roomId,
+  //           })
+  //       );
+  //
+  //       if (response.statusCode == 200) {
+  //         try {
+  //           await _handleGiftPlayback(giftItem, count);
+  //           if (mounted) {
+  //             Navigator.of(context).pop();
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //                 const SnackBar(content: Text('Gift sent successfully!'))
+  //             );
+  //           }
+  //         } catch (e) {
+  //           print('Playback error: $e');
+  //           if (mounted) {
+  //             Navigator.of(context).pop();
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //                 const SnackBar(content: Text('Gift sent but animation failed'))
+  //             );
+  //           }
+  //         }
+  //       } else {
+  //         throw Exception('Failed to send gift');
+  //       }
+  //     } else {
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(content: Text('Insufficient balance!'))
+  //         );
+  //       }
+  //     }
+  //   } catch (e) {
+  //     print('Error sending gift: $e');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text('Error sending gift: ${e.toString()}'))
+  //       );
+  //     }
+  //   }
+  // }
 
 
   Future<void> _updateReceiverWallet(String receiverId, double rewardAmount) async {

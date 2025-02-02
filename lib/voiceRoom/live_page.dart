@@ -1411,6 +1411,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ),
     );
   }
+
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -1656,52 +1658,38 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                   _showOnlineUsersBottomSheet(context);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(15), // Reduced border radius
+                    borderRadius: BorderRadius.circular(15),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min, // Make row as small as possible
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(
+                        Icons.people,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
                       if (isLoadingUsers)
                         SizedBox(
-                          width: 14, // Smaller loading indicator
-                          height: 14,
+                          width: 12,
+                          height: 12,
                           child: CircularProgressIndicator(
-                            strokeWidth: 1.5, // Thinner stroke
+                            strokeWidth: 1.5,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      else ...[
-                        ...onlineUsers.take(2).map((user) => Padding(
-                          padding: const EdgeInsets.only(right: 3), // Reduced padding
-                          child: CircleAvatar(
-                            radius: 10, // Smaller avatar radius
-                            backgroundImage: NetworkImage(user.avatarUrl),
-                            onBackgroundImageError: (e, s) => AssetImage('assets/default_avatar.png'),
+                      else
+                        Text(
+                          '${onlineUsers.length}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
-                        )),
-                        if (onlineUsers.length > 2)
-                          Container(
-                            width: 14, // Smaller counter container
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                '+${onlineUsers.length - 2}',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8, // Smaller font size
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+                        ),
                     ],
                   ),
                 ),
@@ -1711,7 +1699,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
             // Emoji bottom sheet
             Positioned(
               bottom: MediaQuery.of(context).size.height * 0.02, // 2% from bottom
-              left: MediaQuery.of(context).size.width * 0.35, // 35% from left
+              left: MediaQuery.of(context).size.width * 0.32, // 35% from left
               child: Container(
                 width: 35, // Reduced from 30
                 height: 35, // Reduced from 30
