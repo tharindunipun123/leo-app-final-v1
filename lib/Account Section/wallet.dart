@@ -15,6 +15,7 @@ class WalletScreen extends material.StatefulWidget {
 class _WalletScreenState extends material.State<WalletScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
+  String API_BASE_URL = 'http://145.223.21.62:6000';
   String? _selectedPaymentMethod;
   int? _diamondAmount;
   final TextEditingController firstNameController = TextEditingController();
@@ -45,7 +46,7 @@ class _WalletScreenState extends material.State<WalletScreen> {
   Future<void> _addRechargeHistory(int diamonds, int price) async {
     try {
       var response = await http.post(
-        Uri.parse('http://145.223.21.62:8090/api/collections/recharge_history/records'),
+        Uri.parse('$API_BASE_URL/api/recharge'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'userId': widget.userId,
@@ -56,10 +57,13 @@ class _WalletScreenState extends material.State<WalletScreen> {
 
       if (response.statusCode == 200) {
         material.ScaffoldMessenger.of(context).showSnackBar(
-          const material.SnackBar(content: material.Text("Recharge history added successfully")),
+          const material.SnackBar(content: Text("Recharge history added successfully")),
         );
       } else {
         print('Failed to add recharge history: ${response.statusCode}');
+        // Parse error message from Node.js server
+        final errorData = jsonDecode(response.body);
+        print('Error details: ${errorData['details']}');
       }
     } catch (e) {
       print('Error adding recharge history: $e');
@@ -104,6 +108,7 @@ class _WalletScreenState extends material.State<WalletScreen> {
       print('Error fetching diamond amount: $e');
     }
   }
+
 
   @override
   material.Widget build(material.BuildContext context) {

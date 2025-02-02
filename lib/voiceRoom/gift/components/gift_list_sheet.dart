@@ -499,17 +499,75 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
     }
   }
 
-  Future<void> _sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
-    try {
-      if (!_validateGiftItem(giftItem)) {
-        throw Exception('Invalid gift data');
-      }
+  // Future<void> _sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
+  //   try {
+  //     if (!_validateGiftItem(giftItem)) {
+  //       throw Exception('Invalid gift data');
+  //     }
+  //
+  //     final totalCost = giftItem.weight * count.toDouble();
+  //     final rewardAmount = totalCost * 0.4; // 40% of total cost
+  //
+  //     if (await _checkAndUpdateBalance(totalCost)) {
+  //       // Send to PocketBase first
+  //       final response = await http.post(
+  //           Uri.parse('$pocketbaseUrl/api/collections/sending_recieving_gifts/records'),
+  //           headers: {'Content-Type': 'application/json'},
+  //           body: json.encode({
+  //             'sender_user_id': loggedUserId,
+  //             'reciever_user_id': receiver.id,
+  //             'gifts_url': giftItem.sourceURL,
+  //             'giftname': giftItem.name,
+  //             'gift_count': count,
+  //             'voiceRoomId':widget.roomId
+  //           })
+  //       );
+  //
+  //       if (response.statusCode == 200) {
+  //         try {
+  //           await _handleGiftPlayback(giftItem, count);
+  //           await _updateReceiverWallet(receiver.id, rewardAmount);
+  //           if (mounted) {
+  //             Navigator.of(context).pop();
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //                 const SnackBar(content: Text('Gift sent successfully!'))
+  //             );
+  //           }
+  //         } catch (e) {
+  //           print('Playback error: $e');
+  //           if (mounted) {
+  //             Navigator.of(context).pop();
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //                 const SnackBar(content: Text('Gift sent but animation failed'))
+  //             );
+  //           }
+  //         }
+  //       } else {
+  //         throw Exception('Failed to send gift');
+  //       }
+  //     } else {
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(content: Text('Insufficient balance!'))
+  //         );
+  //       }
+  //     }
+  //   } catch (e) {
+  //     print('Error sending gift: $e');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text('Error sending gift: ${e.toString()}'))
+  //       );
+  //     }
+  //   }
+  // }
 
+  Future<void> sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
+    try {
       final totalCost = giftItem.weight * count.toDouble();
-      final rewardAmount = totalCost * 0.4; // 40% of total cost
 
       if (await _checkAndUpdateBalance(totalCost)) {
-        // Send to PocketBase first
+        // Send to PocketBase
         final response = await http.post(
             Uri.parse('$pocketbaseUrl/api/collections/sending_recieving_gifts/records'),
             headers: {'Content-Type': 'application/json'},
@@ -519,14 +577,13 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
               'gifts_url': giftItem.sourceURL,
               'giftname': giftItem.name,
               'gift_count': count,
-              'voiceRoomId':widget.roomId
+              'voiceRoomId': widget.roomId,
             })
         );
 
         if (response.statusCode == 200) {
           try {
             await _handleGiftPlayback(giftItem, count);
-            await _updateReceiverWallet(receiver.id, rewardAmount);
             if (mounted) {
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1103,7 +1160,7 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
                 ? null
                 : () {
               final giftCount = int.tryParse(countNotifier.value) ?? 1;
-              _sendGift(selectedGift, giftCount, selectedUserNotifier.value!);
+              sendGift(selectedGift, giftCount, selectedUserNotifier.value!);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,

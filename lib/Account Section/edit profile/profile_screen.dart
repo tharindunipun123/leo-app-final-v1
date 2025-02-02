@@ -23,6 +23,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  List<Map<String, dynamic>> profileViewers = [];
   int profileViewCount = 0;
   String? userId;
   Map<String, dynamic>? userProfile;
@@ -84,6 +85,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Error fetching profile views: $e');
     }
   }
+
+  Future<void> _fetchProfileViewers() async {
+    try {
+      final viewsResponse = await http.get(
+        Uri.parse('$baseUrl/api/collections/profileView/records?filter=(viewed_users_id="$userId")'),
+      );
+
+      if (viewsResponse.statusCode == 200) {
+        final viewsData = json.decode(viewsResponse.body);
+        final viewsList = viewsData['items'] as List;
+        List<Map<String, dynamic>> viewers = [];
+
+        for (var view in viewsList) {
+          final userResponse = await http.get(
+            Uri.parse('$baseUrl/api/collections/users/records/${view['viewer_user_id']}'),
+          );
+
+          if (userResponse.statusCode == 200) {
+            final userData = json.decode(userResponse.body);
+            viewers.add({
+              'id': userData['id'],
+              'name': '${userData['firstname']} ${userData['lastname']}',
+              'avatar': userData['avatar'],
+              'collectionId': userData['collectionId'],
+            });
+          }
+        }
+
+        setState(() {
+          profileViewers = viewers;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile viewers: $e');
+    }
+  }
+
 
 
 
@@ -309,6 +347,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+
+  void _showViewersBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: darkModeEnabled ? kDarkBoxColor : Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Text(
+                'Profile Viewers',
+                style: TextStyle(
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.bold,
+                  color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
+                ),
+              ),
+            ),
+
+            Divider(),
+
+            Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.5,
+              ),
+              child: profileViewers.isEmpty
+                  ? Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'No profile viewers yet',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16.sp,
+                  ),
+                ),
+              )
+                  : ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                itemCount: profileViewers.length,
+                itemBuilder: (context, index) {
+                  final viewer = profileViewers[index];
+                  return Container(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 50.w,
+                          height: 50.w,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.grey[200]!,
+                              width: 1,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25.w),
+                            child: Image.network(
+                              '$baseUrl/api/files/${viewer['collectionId']}/${viewer['id']}/${viewer['avatar']}',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Icon(
+                                Icons.person,
+                                color: Colors.grey[400],
+                                size: 30.w,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 12.w),
+                        Text(
+                          viewer['name'],
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w500,
+                            color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildGiftsSection() {
     return Column(
       children: [
@@ -350,63 +495,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileViewsSection() {
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 15.w),
-      padding: EdgeInsets.symmetric(vertical: 12.w, horizontal: 15.w),
-      decoration: BoxDecoration(
-        color: darkModeEnabled ? Colors.grey[900] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Profile Views',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w600,
-                  color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
-                ),
-              ),
-              SizedBox(height: 4.w),
-              Text(
-                'Total number of profile visits',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  color: darkModeEnabled ? Colors.grey[400] : Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.w),
-            decoration: BoxDecoration(
-              color: kPrimaryColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
+    return GestureDetector(
+      onTap: () {
+        _fetchProfileViewers().then((_) => _showViewersBottomSheet());
+      },
+      child: Container(
+        margin: EdgeInsets.symmetric(vertical: 15.w),
+        padding: EdgeInsets.symmetric(vertical: 12.w, horizontal: 15.w),
+        decoration: BoxDecoration(
+          color: darkModeEnabled ? Colors.grey[900] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.visibility,
-                  size: 16.w,
-                  color: kPrimaryColor,
-                ),
-                SizedBox(width: 6.w),
                 Text(
-                  '$profileViewCount',
+                  'Profile Views',
                   style: TextStyle(
                     fontSize: 14.sp,
-                    fontWeight: FontWeight.bold,
-                    color: kPrimaryColor,
+                    fontWeight: FontWeight.w600,
+                    color: darkModeEnabled ? kDarkTextColor : kAltTextColor,
+                  ),
+                ),
+                SizedBox(height: 4.w),
+                Text(
+                  'Total number of profile visits',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: darkModeEnabled ? Colors.grey[400] : Colors.grey[600],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.w),
+              decoration: BoxDecoration(
+                color: kPrimaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.visibility,
+                    size: 16.w,
+                    color: kPrimaryColor,
+                  ),
+                  SizedBox(width: 6.w),
+                  Text(
+                    '$profileViewCount',
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.bold,
+                      color: kPrimaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

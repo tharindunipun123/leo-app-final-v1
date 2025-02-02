@@ -169,7 +169,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     }
   }
 
-// Add this method to handle group disbanding
   Future<void> _disbandGroup() async {
     try {
       // First, remove all joined users
@@ -188,33 +187,49 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
         }
       }
 
+      // First, clean up all duplicate records
+      await _deleteDuplicateOnlineUserRecords(widget.userId, widget.roomID);
+
+      // Uninitialize ZEGO services
+      ZegoGiftManager().service.uninit();
+      await ZegoUIKit().leaveRoom();
+
+      // Emit leave room event to socket
+      socket.emit('leaveRoom', {
+        'roomId': widget.roomID,
+        'userId': widget.userId,
+      });
+
+      // Update end time for the session
+      await updateEndTime(widget.userId, widget.roomID);
+
+      // Disconnect socket
+      socket.disconnect();
+
       // Then, delete the voice room
       final deleteResponse = await http.delete(
         Uri.parse('$POCKETBASE_URL/api/collections/voiceRooms/records/${widget.roomID}'),
       );
 
-      if (deleteResponse.statusCode == 200) {
-        // Clean up and exit
-        await _handleLogout();
+      _handleLogout();
 
-        // Pop back to groups screen and refresh it
-        if (mounted) {
-          // Pop all screens until we reach the groups screen
-          Navigator.of(context).popUntil((route) {
-            return route.settings.name == '/groups' || route.isFirst;
-          });
+        //
+        // // Finally, navigate back
+        //
+        //   Navigator.of(context).pop(); // Close current screen
+        //   Navigator.of(context).pop(); // Pop back to groups screen
+        //
+        //   // Show success message
+        //   if (context.mounted) {
+        //     ScaffoldMessenger.of(context).showSnackBar(
+        //       SnackBar(
+        //         content: Text('Group disbanded successfully'),
+        //         backgroundColor: Colors.green,
+        //       ),
+        //     );
+        //   }
 
-          // Notify groups screen to refresh
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Group disbanded successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        }
-      }
+
     } catch (e) {
       print('Error disbanding group: $e');
       if (mounted) {
@@ -224,7 +239,6 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       }
     }
   }
-
 
   void _initializeSocket() {
     socket = IO.io('http://145.223.21.62:3000', <String, dynamic>{
@@ -1367,6 +1381,36 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     );
   }
 
+  Widget _buildEmojiButton(String emoji) {
+    return Container(
+      margin: EdgeInsets.all(4), // Reduced from 8
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12), // Reduced from 16
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            print('Selected emoji: $emoji');
+            Navigator.pop(context);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: EdgeInsets.all(8), // Reduced from 12
+            child: Center(
+              child: Text(
+                emoji,
+                style: TextStyle(
+                  fontSize: 24, // Reduced from 30
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -1659,6 +1703,119 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                           ),
                       ],
                     ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Emoji bottom sheet
+            Positioned(
+              bottom: MediaQuery.of(context).size.height * 0.02, // 2% from bottom
+              left: MediaQuery.of(context).size.width * 0.35, // 35% from left
+              child: Container(
+                width: 35, // Reduced from 30
+                height: 35, // Reduced from 30
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.8),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero, // Remove default padding
+                  constraints: BoxConstraints(), // Remove default constraints
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (BuildContext context) {
+                        return Container(
+                          height: MediaQuery.of(context).size.height * 0.4, // Reduced from 0.5
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.9),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              topRight: Radius.circular(20),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              // Handle bar
+                              Container(
+                                width: 40, // Reduced from 40
+                                height: 4, // Reduced from 4
+                                margin: EdgeInsets.only(top: 8), // Reduced from 12
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(1.5),
+                                ),
+                              ),
+
+                              // Close button
+                              Align(
+                                alignment: Alignment.topRight,
+                                child: IconButton(
+                                  icon: Icon(Icons.close, color: Colors.white70, size: 20),
+                                  padding: EdgeInsets.all(12),
+                                  onPressed: () => Navigator.pop(context),
+                                ),
+                              ),
+
+                              // Emoji grid
+                              Expanded(
+                                child: GridView.count(
+                                  crossAxisCount: 5,
+                                  mainAxisSpacing: 8, // Added spacing
+                                  crossAxisSpacing: 8, // Added spacing
+                                  padding: EdgeInsets.symmetric(horizontal: 12),
+                                  childAspectRatio: 1.1, // Adjust aspect ratio for better fit
+                                  children: [
+                                    // Happy faces
+                                    _buildEmojiButton('😊'),
+                                    _buildEmojiButton('😄'),
+                                    _buildEmojiButton('😃'),
+                                    _buildEmojiButton('😁'),
+                                    _buildEmojiButton('😅'),
+
+                                    // Love faces
+                                    _buildEmojiButton('😍'),
+                                    _buildEmojiButton('🥰'),
+                                    _buildEmojiButton('😘'),
+                                    _buildEmojiButton('😗'),
+                                    _buildEmojiButton('🤗'),
+
+                                    // Fun faces
+                                    _buildEmojiButton('😜'),
+                                    _buildEmojiButton('😝'),
+                                    _buildEmojiButton('😋'),
+                                    _buildEmojiButton('😂'),
+                                    _buildEmojiButton('🤣'),
+
+                                    // Cool faces
+                                    _buildEmojiButton('😎'),
+                                    _buildEmojiButton('🤩'),
+                                    _buildEmojiButton('🥳'),
+                                    _buildEmojiButton('😏'),
+                                    _buildEmojiButton('😌'),
+
+                                    // Reaction faces
+                                    _buildEmojiButton('😮'),
+                                    _buildEmojiButton('🤔'),
+                                    _buildEmojiButton('😳'),
+                                    _buildEmojiButton('🥺'),
+                                    _buildEmojiButton('😇'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                  icon: Icon(
+                    Icons.emoji_emotions,
+                    color: Colors.white,
+                    size: 20, // Reduced from 24
                   ),
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+const String STAR_API_URL = 'http://145.223.21.62:6001';
 
 class TopGifterCard extends StatelessWidget {
   final Map<String, dynamic> userDetails;
@@ -147,148 +148,128 @@ class TopGifterCard extends StatelessWidget {
   }
 }
 
-
 class Topstar extends StatefulWidget {
-
   @override
-
-
-  _RankingBottomSheetState createState() => _RankingBottomSheetState();
+  _TopstarState createState() => _TopstarState();
 }
 
-class _RankingBottomSheetState extends State<Topstar> with SingleTickerProviderStateMixin {
+class _TopstarState extends State<Topstar> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String roomId = "qb61a1m8i7c4lxm";
   bool isLoading = true;
   List<Map<String, dynamic>> dailyRankings = [];
   List<Map<String, dynamic>> weeklyRankings = [];
-  List<Map<String, dynamic>> totalRankings = [];
+  List<Map<String, dynamic>> monthlyRankings = [];
   Map<String, dynamic>? lastWeekTopGifter;
+
   static Map<String, DateTime> _lastFetchTime = {};
   static const cacheDuration = Duration(minutes: 5);
-  Map<String, double> diamondAmounts = {};
-  Map<String, dynamic> userDetails = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _loadAllData();
+    _loadData(); // Initial load
   }
 
   void _handleTabChange() {
-    setState(() {});
-  }
-
-  Future<void> _loadAllData() async {
-    setState(() => isLoading = true);
-    try {
-      await _fetchGiftDiamondAmounts();
-      await Future.wait([
-        _fetchRankings(),
-        _fetchLastWeekTopGifter(),
-      ]);
-      setState(() => isLoading = false);
-    } catch (e) {
-      print('Error loading data: $e');
-      setState(() => isLoading = false);
+    if (_tabController.indexIsChanging) {
+      _loadData(); // Reload data when tab changes
     }
   }
 
-  Future<bool> _verifyGifterBadge(String userId) async {
+  Future<void> _loadData() async {
+    if (!mounted) return;
+
+    setState(() => isLoading = true);
+
     try {
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records?filter=userId="${userId}"&fields=batch_name'),
-      );
+      // Always fetch last week's top gifter
+      await _fetchLastWeekTopGifter();
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        bool hasGifterBadge = items.any((item) => item['batch_name'] == 'star');
-        print(hasGifterBadge);
-
-        if (!hasGifterBadge) {
-          final createResponse = await http.post(
-            Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'userId': userId,
-              'batch_name': 'star',
-              'created': DateTime.now().toIso8601String(),
-              'updated': DateTime.now().toIso8601String(),
-            }),
-          );
-
-          return createResponse.statusCode == 200;
-        }
-
-        return hasGifterBadge;
+      // Fetch rankings based on current tab
+      switch (_tabController.index) {
+        case 0:
+          await _fetchDailyRankings();
+          break;
+        case 1:
+          await _fetchWeeklyRankings();
+          break;
+        case 2:
+          await _fetchMonthlyRankings();
+          break;
       }
     } catch (e) {
-      print('Error verifying gifter badge: $e');
+      print('Error loading data: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
-    return false;
+  }
+
+  Future<void> _fetchDailyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/daily'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            dailyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching daily rankings: $e');
+    }
+  }
+
+  Future<void> _fetchWeeklyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/weekly'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            weeklyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching weekly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchMonthlyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/monthly'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            monthlyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching monthly rankings: $e');
+    }
   }
 
   Future<void> _fetchLastWeekTopGifter() async {
-
-
     try {
-      final now = DateTime.now();
-      final lastWeekStart = now.subtract(Duration(days: 14));
-      final lastWeekEnd = now.subtract(Duration(days: 7));
-
-      final encodedFilter = Uri.encodeComponent(
-          'created >= "${lastWeekStart.toIso8601String()}" && created < "${lastWeekEnd.toIso8601String()}"'
-      );
-
-      final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'
-                '?filter=$encodedFilter'
-                '&perPage=500'
-        ),
-      );
+      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/last-week'));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final gifts = data['items'] as List;
-
-        Map<String, double> userTotals = {};
-
-        for (var gift in gifts) {
-          final senderId = gift['reciever_user_id'];
-          final giftName = gift['giftname'];
-          final count = gift['gift_count'] as int;
-
-          if (diamondAmounts.containsKey(giftName)) {
-            final amount = diamondAmounts[giftName]!;
-            userTotals[senderId] = (userTotals[senderId] ?? 0) + (count * amount);
-          }
-        }
-
-        if (userTotals.isNotEmpty) {
-          var topEntry = userTotals.entries
-              .reduce((a, b) => a.value > b.value ? a : b);
-
-          await _verifyGifterBadge(topEntry.key);
-
-          final userResponse = await http.get(
-            Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${topEntry.key}'),
-          );
-
-          if (userResponse.statusCode == 200) {
-            final userData = json.decode(userResponse.body);
-            setState(() {
-              lastWeekTopGifter = {
-                'userDetails': userData,
-                'total': topEntry.value,
-              };
-            });
-            _lastFetchTime['lastWeekGifter'] = DateTime.now();
-          }
+        if (data['success'] == true && data['data'] != null && data['data'].isNotEmpty) {
+          final topGifter = data['data'][0];
+          setState(() {
+            lastWeekTopGifter = {
+              'userDetails': topGifter['userDetails'],
+              'total': topGifter['total'],
+            };
+          });
         }
       }
     } catch (e) {
@@ -296,178 +277,44 @@ class _RankingBottomSheetState extends State<Topstar> with SingleTickerProviderS
     }
   }
 
-  Future<void> _fetchGiftDiamondAmounts() async {
-    try {
-      print('Fetching gift diamond amounts...');
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/gifts/records'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        diamondAmounts = Map.fromEntries(
-            items.map((item) => MapEntry(
-              item['giftname'],
-              (item['diamond_amount'] as num).toDouble(),
-            ))
-        );
-        print('Fetched diamond amounts: $diamondAmounts');
-      }
-    } catch (e) {
-      print('Error fetching diamond amounts: $e');
-    }
-  }
-
-  Future<void> _fetchUserDetails(String userId) async {
-    if (userDetails.containsKey(userId)) return;
-
-    try {
-      print('Fetching user details for ID: $userId');
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/users/records/$userId'),
-      );
-
-      if (response.statusCode == 200) {
-        final userData = json.decode(response.body);
-        userDetails[userId] = userData;
-        print('Fetched user details: ${userDetails[userId]}');
-      }
-    } catch (e) {
-      print('Error fetching user details: $e');
-    }
-  }
-
-  Future<void> _fetchRankings() async {
-    try {
-      print('Fetching global rankings...');
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final gifts = data['items'] as List;
-
-        // Current date
-        final now = DateTime.now();
-
-        // Process for daily rankings
-        final today = DateTime(now.year, now.month, now.day);
-        final dailyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(today);
-        }).toList();
-
-        // Process for weekly rankings
-        final weekAgo = now.subtract(Duration(days: 7));
-        final weeklyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(weekAgo);
-        }).toList();
-
-        // Process for monthly rankings
-        final monthStart = DateTime(now.year, now.month, 1);
-        final monthlyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(monthStart);
-        }).toList();
-
-        // Calculate rankings
-        dailyRankings = await _calculateRankings(dailyGifts);
-        weeklyRankings = await _calculateRankings(weeklyGifts);
-        totalRankings = await _calculateRankings(monthlyGifts);
-
-        setState(() {});
-      } else {
-        print('Error fetching rankings: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error fetching rankings: $e');
-    }
-  }
-
-
-  Future<List<Map<String, dynamic>>> _calculateRankings(List<dynamic> gifts) async {
-    Map<String, double> userTotals = {};
-
-    for (var gift in gifts) {
-      final senderId = gift['reciever_user_id'];
-      final giftName = gift['giftname'];
-      final count = gift['gift_count'] as int;
-
-      // Check if giftName exists in diamondAmounts
-      if (diamondAmounts.containsKey(giftName)) {
-        final diamondAmount = diamondAmounts[giftName]!;
-        userTotals[senderId] = (userTotals[senderId] ?? 0) + (count * diamondAmount);
-
-        // Fetch user details if not already fetched
-        if (!userDetails.containsKey(senderId)) {
-          await _fetchUserDetails(senderId);
-        }
-      } else {
-        print('Gift name "$giftName" not found in diamond amounts.');
-      }
-    }
-
-    // Sort and prepare rankings
-    var sortedUsers = userTotals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return sortedUsers.map((entry) => {
-      'userId': entry.key,
-      'total': entry.value,
-      'userDetails': userDetails[entry.key],
-    }).toList();
-  }
-
-
-
-
   @override
   Widget build(BuildContext context) {
-    // Change from Container to Scaffold for full page
     return Column(
-        children: [
-          if (lastWeekTopGifter != null)
-            TopGifterCard(
-              userDetails: lastWeekTopGifter!['userDetails'],
-              totalAmount: lastWeekTopGifter!['total'],
-            ),
-          // Tab bar
-          Container(
-            margin: EdgeInsets.only(top: 8),
-            child: TabBar(
-              controller: _tabController,
-              tabs: [
-                Tab(text: 'Today'),
-                Tab(text: 'This Week'),
-                Tab(text: 'This Month'),
-              ],
-              labelColor: Colors.blue,
-              unselectedLabelColor: Colors.grey,
-              indicatorSize: TabBarIndicatorSize.label,
-              labelStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+      children: [
+        if (lastWeekTopGifter != null)
+          TopGifterCard(
+            userDetails: lastWeekTopGifter!['userDetails'],
+            totalAmount: lastWeekTopGifter!['total'],
           ),
-
-          // Content
-          Expanded(
-            child: isLoading
-                ? Center(child: CircularProgressIndicator())
-                : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildRankingList(dailyRankings),
-                _buildRankingList(weeklyRankings),
-                _buildRankingList(totalRankings), // Use the monthly rankings here
-              ],
-            ),
+        Container(
+          margin: EdgeInsets.only(top: 8),
+          child: TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(text: 'Today'),
+              Tab(text: 'This Week'),
+              Tab(text: 'This Month'),
+            ],
+            labelColor: Colors.blue,
+            unselectedLabelColor: Colors.grey,
+            indicatorSize: TabBarIndicatorSize.label,
+            labelStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-        ]
+        ),
+        Expanded(
+          child: isLoading
+              ? Center(child: CircularProgressIndicator())
+              : TabBarView(
+            controller: _tabController,
+            children: [
+              _buildRankingList(dailyRankings),
+              _buildRankingList(weeklyRankings),
+              _buildRankingList(monthlyRankings),
+            ],
+          ),
+        ),
+      ],
     );
-
   }
 
   Widget _buildRankingList(List<Map<String, dynamic>> rankings) {

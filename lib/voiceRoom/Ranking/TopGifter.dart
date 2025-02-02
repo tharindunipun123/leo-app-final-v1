@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+const String GIFTER_API_URL = 'http://145.223.21.62:6002';  // New port for gifter rankings
+
 class TopGifterCard extends StatelessWidget {
   final Map<String, dynamic> userDetails;
   final double totalAmount;
@@ -149,34 +151,34 @@ class TopGifterCard extends StatelessWidget {
 }
 
 class RankingBottomSheet extends StatefulWidget {
-
   @override
   _RankingBottomSheetState createState() => _RankingBottomSheetState();
 }
 
 class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool isLoading = true;
   Map<String, dynamic>? lastWeekTopGifter;
   String refreshMessage = '';
-  static Map<String, DateTime> _lastFetchTime = {};
-  static const cacheDuration = Duration(minutes: 5);
-  String roomId = "qb61a1m8i7c4lxm";
-  bool isLoading = true;
   List<Map<String, dynamic>> dailyRankings = [];
   List<Map<String, dynamic>> weeklyRankings = [];
-  List<Map<String, dynamic>> totalRankings = [];
-  Map<String, double> diamondAmounts = {};
-  Map<String, dynamic> userDetails = {};
+  List<Map<String, dynamic>> monthlyRankings = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(_handleTabChange); // Add this line
+    _tabController.addListener(_handleTabChange);
     _updateRefreshMessage();
-    _loadAllData();
+    _loadData(); // Initial load
   }
 
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging) {
+      _loadData();
+    }
+    _updateRefreshMessage();
+  }
 
   void _updateRefreshMessage() {
     setState(() {
@@ -194,207 +196,109 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
     });
   }
 
-  void _handleTabChange() {
-    _updateRefreshMessage();
-  }
+  Future<void> _loadData() async {
+    if (!mounted) return;
 
-  Future<void> _loadAllData() async {
     setState(() => isLoading = true);
+
     try {
-      await _fetchGiftDiamondAmounts();
-      await Future.wait([
-        _fetchRankings(),
-        _fetchLastWeekTopGifter(),
-      ]);
-      setState(() => isLoading = false);
+      // Load data based on current tab
+      switch (_tabController.index) {
+        case 0:
+          await _fetchDailyRankings();
+          break;
+        case 1:
+          await _fetchWeeklyRankings();
+          break;
+        case 2:
+          await _fetchMonthlyRankings();
+          break;
+      }
+
+      // Always fetch last week's top gifter
+      await _fetchLastWeekTopGifter();
     } catch (e) {
       print('Error loading data: $e');
-      setState(() => isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
-  Future<void> _fetchGiftDiamondAmounts() async {
+  Future<void> _fetchDailyRankings() async {
     try {
-      print('Fetching gift diamond amounts...');
       final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/gifts/records'),
+          Uri.parse('$GIFTER_API_URL/api/gifters/daily')
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        diamondAmounts = Map.fromEntries(
-            items.map((item) => MapEntry(
-              item['giftname'],
-              (item['diamond_amount'] as num).toDouble(),
-            ))
-        );
-        print('Fetched diamond amounts: $diamondAmounts');
-      }
-    } catch (e) {
-      print('Error fetching diamond amounts: $e');
-    }
-  }
-
-  Future<void> _fetchUserDetails(String userId) async {
-    if (userDetails.containsKey(userId)) return;
-
-    try {
-      print('Fetching user details for ID: $userId');
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/users/records/$userId'),
-      );
-
-      if (response.statusCode == 200) {
-        final userData = json.decode(response.body);
-        userDetails[userId] = userData;
-        print('Fetched user details: ${userDetails[userId]}');
-      }
-    } catch (e) {
-      print('Error fetching user details: $e');
-    }
-  }
-  Future<bool> _verifyGifterBadge(String userId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records?filter=userId="${userId}"&fields=batch_name'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        bool hasGifterBadge = items.any((item) => item['batch_name'] == 'gifter');
-
-        if (!hasGifterBadge) {
-          final createResponse = await http.post(
-            Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'userId': userId,
-              'batch_name': 'gifter',
-              'created': DateTime.now().toIso8601String(),
-              'updated': DateTime.now().toIso8601String(),
-            }),
-          );
-
-          return createResponse.statusCode == 200;
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            dailyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
         }
-
-        return hasGifterBadge;
       }
     } catch (e) {
-      print('Error verifying gifter badge: $e');
+      print('Error fetching daily rankings: $e');
     }
-    return false;
   }
 
-  Future<void> _fetchRankings() async {
+  Future<void> _fetchWeeklyRankings() async {
     try {
-      print('Fetching global rankings...');
       final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'),
+          Uri.parse('$GIFTER_API_URL/api/gifters/weekly')
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final gifts = data['items'] as List;
-
-        // Current date
-        final now = DateTime.now();
-
-        // Process for daily rankings
-        final today = DateTime(now.year, now.month, now.day);
-        final dailyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(today);
-        }).toList();
-
-        // Process for weekly rankings
-        final weekAgo = now.subtract(Duration(days: 7));
-        final weeklyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(weekAgo);
-        }).toList();
-
-        // Process for monthly rankings
-        final monthStart = DateTime(now.year, now.month, 1);
-        final monthlyGifts = gifts.where((gift) {
-          final giftDate = DateTime.parse(gift['created']);
-          return giftDate.isAfter(monthStart);
-        }).toList();
-
-        // Calculate rankings
-        dailyRankings = await _calculateRankings(dailyGifts);
-        weeklyRankings = await _calculateRankings(weeklyGifts);
-        totalRankings = await _calculateRankings(monthlyGifts);
-
-        setState(() {});
-      } else {
-        print('Error fetching rankings: ${response.statusCode}');
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            weeklyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
+        }
       }
     } catch (e) {
-      print('Error fetching rankings: $e');
+      print('Error fetching weekly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchMonthlyRankings() async {
+    try {
+      final response = await http.get(
+          Uri.parse('$GIFTER_API_URL/api/gifters/monthly')
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            monthlyRankings = List<Map<String, dynamic>>.from(data['data']);
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching monthly rankings: $e');
     }
   }
 
   Future<void> _fetchLastWeekTopGifter() async {
-
     try {
-      final now = DateTime.now();
-      final lastWeekStart = now.subtract(Duration(days: 14));
-      final lastWeekEnd = now.subtract(Duration(days: 7));
-
-      final encodedFilter = Uri.encodeComponent(
-          'created >= "${lastWeekStart.toIso8601String()}" && created < "${lastWeekEnd.toIso8601String()}"'
-      );
-
       final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'
-                '?filter=$encodedFilter'
-                '&perPage=500'
-        ),
+          Uri.parse('$GIFTER_API_URL/api/gifters/last-week')
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final gifts = data['items'] as List;
-
-        Map<String, double> userTotals = {};
-
-        for (var gift in gifts) {
-          final senderId = gift['sender_user_id'];
-          final giftName = gift['giftname'];
-          final count = gift['gift_count'] as int;
-
-          if (diamondAmounts.containsKey(giftName)) {
-            final amount = diamondAmounts[giftName]!;
-            userTotals[senderId] = (userTotals[senderId] ?? 0) + (count * amount);
-          }
-        }
-
-        if (userTotals.isNotEmpty) {
-          var topEntry = userTotals.entries
-              .reduce((a, b) => a.value > b.value ? a : b);
-
-          await _verifyGifterBadge(topEntry.key);
-
-          final userResponse = await http.get(
-            Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${topEntry.key}'),
-          );
-
-          if (userResponse.statusCode == 200) {
-            final userData = json.decode(userResponse.body);
-            setState(() {
-              lastWeekTopGifter = {
-                'userDetails': userData,
-                'total': topEntry.value,
-              };
-            });
-            _lastFetchTime['lastWeekGifter'] = DateTime.now();
-          }
+        if (data['success'] == true && data['data'] != null && data['data'].isNotEmpty) {
+          final topGifter = data['data'][0];
+          setState(() {
+            lastWeekTopGifter = {
+              'userDetails': topGifter['userDetails'],
+              'total': topGifter['total'],
+            };
+          });
         }
       }
     } catch (e) {
@@ -402,48 +306,15 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
     }
   }
 
-
-  Future<List<Map<String, dynamic>>> _calculateRankings(List<dynamic> gifts) async {
-    Map<String, double> userTotals = {};
-
-    for (var gift in gifts) {
-      final senderId = gift['sender_user_id'];
-      final giftName = gift['giftname'];
-      final count = gift['gift_count'] as int;
-
-      // Check if giftName exists in diamondAmounts
-      if (diamondAmounts.containsKey(giftName)) {
-        final diamondAmount = diamondAmounts[giftName]!;
-        userTotals[senderId] = (userTotals[senderId] ?? 0) + (count * diamondAmount);
-
-        // Fetch user details if not already fetched
-        if (!userDetails.containsKey(senderId)) {
-          await _fetchUserDetails(senderId);
-        }
-      } else {
-        print('Gift name "$giftName" not found in diamond amounts.');
-      }
-    }
-
-    // Sort and prepare rankings
-    var sortedUsers = userTotals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return sortedUsers.map((entry) => {
-      'userId': entry.key,
-      'total': entry.value,
-      'userDetails': userDetails[entry.key],
-    }).toList();
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
-    // Change from Container to Scaffold for full page
-    return Column(
+    return Scaffold(
+      body: Column(
         children: [
           if (lastWeekTopGifter != null)
             TopGifterCard(
@@ -476,16 +347,14 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
               children: [
                 _buildRankingList(dailyRankings),
                 _buildRankingList(weeklyRankings),
-                _buildRankingList(totalRankings), // Use the monthly rankings here
+                _buildRankingList(monthlyRankings),
               ],
             ),
           ),
-        ]
+        ],
+      ),
     );
-
   }
-
-
 
   Widget _buildRankingList(List<Map<String, dynamic>> rankings) {
     return Column(
@@ -514,7 +383,7 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(width: 8),
-              Expanded( // Add this
+              Expanded(
                 child: Text(
                   refreshMessage,
                   style: TextStyle(
@@ -645,9 +514,4 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
     );
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 }

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+const String NODE_API_URL = 'http://145.223.21.62:6000';
+
 class TopRechargerCard extends StatelessWidget {
   final Map<String, dynamic> userDetails;
   final double totalAmount;
@@ -24,8 +26,8 @@ class TopRechargerCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF4682B4).withOpacity(0.95),  // Steel blue
-            Color(0xFF0000CD).withOpacity(0.90), // Royal blue
+            Color(0xFF4682B4).withOpacity(0.95),
+            Color(0xFF0000CD).withOpacity(0.90),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
@@ -41,16 +43,12 @@ class TopRechargerCard extends StatelessWidget {
       child: IntrinsicHeight(
         child: Row(
           children: [
-            // Profile Image Section
             Container(
               width: 50,
               height: 50,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white,
-                  width: 2,
-                ),
+                border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -79,8 +77,6 @@ class TopRechargerCard extends StatelessWidget {
               ),
             ),
             SizedBox(width: 12),
-
-            // User Details Section
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,11 +84,7 @@ class TopRechargerCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.workspace_premium,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      Icon(Icons.workspace_premium, color: Colors.white, size: 16),
                       SizedBox(width: 4),
                       Text(
                         'Last Week\'s Champion',
@@ -134,8 +126,6 @@ class TopRechargerCard extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Amount Section
             Container(
               padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -149,11 +139,7 @@ class TopRechargerCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    'assets/images/diamond.png',
-                    width: 16,
-                    height: 16,
-                  ),
+                  Image.asset('assets/images/diamond.png', width: 16, height: 16),
                   SizedBox(width: 4),
                   Text(
                     '${totalAmount.toStringAsFixed(0)}',
@@ -192,10 +178,9 @@ class _RechargeRankingsState extends State<RechargeRankings>
   List<Map<String, dynamic>> dailyRankings = [];
   List<Map<String, dynamic>> weeklyRankings = [];
   List<Map<String, dynamic>> monthlyRankings = [];
-  Map<String, dynamic> userDetails = {};
   Map<String, dynamic>? lastWeekTopRecharger;
 
-  // Modified cache mechanism with separate caches
+  // Cache mechanism
   static Map<String, List<Map<String, dynamic>>> _rankingsCache = {};
   static Map<String, DateTime> _lastFetchTime = {};
   static const cacheDuration = Duration(minutes: 5);
@@ -205,35 +190,33 @@ class _RechargeRankingsState extends State<RechargeRankings>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _loadAllData();
+    _loadData(); // Initial load
   }
 
   void _handleTabChange() {
     if (_tabController.indexIsChanging) {
-      setState(() {
-        lastWeekTopRecharger = null; // Clear the last week's champion
-      });
-      _loadAllData();
+      _loadData(); // Reload data when tab changes
     }
   }
 
-  bool _isCacheValid(String key) {
-    final lastFetch = _lastFetchTime[key];
-    if (lastFetch == null) return false;
-    return DateTime.now().difference(lastFetch) < cacheDuration;
-  }
-
-  Future<void> _loadAllData() async {
+  Future<void> _loadData() async {
     setState(() => isLoading = true);
 
     try {
-      // Always fetch last week's top recharger first
+      // Always fetch last week's top recharger
       await _fetchLastWeekTopRecharger();
 
-      // Then fetch the rankings if cache is invalid
-      if (!_isCacheValid('rankings')) {
-        await _fetchRechargeHistory();
-        _lastFetchTime['rankings'] = DateTime.now();
+      // Fetch rankings based on current tab
+      switch (_tabController.index) {
+        case 0:
+          await _fetchDailyRankings();
+          break;
+        case 1:
+          await _fetchWeeklyRankings();
+          break;
+        case 2:
+          await _fetchMonthlyRankings();
+          break;
       }
     } catch (e) {
       print('Error loading data: $e');
@@ -241,6 +224,88 @@ class _RechargeRankingsState extends State<RechargeRankings>
       setState(() => isLoading = false);
     }
   }
+
+  Future<void> _fetchDailyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$NODE_API_URL/api/rankings/daily'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            dailyRankings = List<Map<String, dynamic>>.from(data['data'].map((item) => {
+              'userId': item['userId'],
+              'total': item['total'].toDouble(),
+              'userDetails': item['userDetails']
+            }));
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching daily rankings: $e');
+    }
+  }
+
+  Future<void> _fetchWeeklyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$NODE_API_URL/api/rankings/weekly'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            weeklyRankings = List<Map<String, dynamic>>.from(data['data'].map((item) => {
+              'userId': item['userId'],
+              'total': item['total'].toDouble(),
+              'userDetails': item['userDetails']
+            }));
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching weekly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchMonthlyRankings() async {
+    try {
+      final response = await http.get(Uri.parse('$NODE_API_URL/api/rankings/monthly'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            monthlyRankings = List<Map<String, dynamic>>.from(data['data'].map((item) => {
+              'userId': item['userId'],
+              'total': item['total'].toDouble(),
+              'userDetails': item['userDetails']
+            }));
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching monthly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchLastWeekTopRecharger() async {
+    try {
+      final response = await http.get(Uri.parse('$NODE_API_URL/api/rankings/last-week'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['data'] != null && data['data'].isNotEmpty) {
+          final topRecharger = data['data'][0];
+          setState(() {
+            lastWeekTopRecharger = {
+              'userDetails': topRecharger['userDetails'],
+              'total': topRecharger['total'],
+            };
+          });
+          await _verifyBillionaireBadge(topRecharger['userDetails']['id']);
+        }
+      }
+    } catch (e) {
+      print('Error fetching last week top recharger: $e');
+    }
+  }
+
   Future<bool> _verifyBillionaireBadge(String userId) async {
     try {
       final response = await http.get(
@@ -250,12 +315,9 @@ class _RechargeRankingsState extends State<RechargeRankings>
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final items = data['items'] as List;
-
-        // Check if user has billionaire badge
         bool hasBillionairBadge = items.any((item) => item['batch_name'] == 'billionair');
 
         if (!hasBillionairBadge) {
-          // Create the badge if not found
           final createResponse = await http.post(
             Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records'),
             headers: {'Content-Type': 'application/json'},
@@ -267,204 +329,14 @@ class _RechargeRankingsState extends State<RechargeRankings>
             }),
           );
 
-          if (createResponse.statusCode == 200) {
-            print('Created billionaire badge for user: $userId');
-            return true;
-          } else {
-            print('Failed to create billionaire badge: ${createResponse.statusCode}');
-            return false;
-          }
+          return createResponse.statusCode == 200;
         }
-
-        return hasBillionairBadge;
+        return true;
       }
     } catch (e) {
       print('Error verifying billionaire badge: $e');
     }
     return false;
-  }
-
-  Future<bool> _createBillionaireBadgeIfNeeded(String userId) async {
-    try {
-      // First check if badge already exists
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records/$userId'),
-      );
-
-      if (response.statusCode == 404) {
-        // Badge doesn't exist, create it
-        final createResponse = await http.post(
-          Uri.parse('http://145.223.21.62:8090/api/collections/recieved_badges/records'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'userId': userId,
-            'batch_name': 'billionair',
-          }),
-        );
-
-        return createResponse.statusCode == 200;
-      }
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Error creating billionaire badge: $e');
-      return false;
-    }
-  }
-
-  Future<void> _fetchLastWeekTopRecharger() async {
-    try {
-      final now = DateTime.now();
-      final lastWeekStart = now.subtract(Duration(days: 14));
-      final lastWeekEnd = now.subtract(Duration(days: 7));
-
-      final encodedFilter = Uri.encodeComponent(
-          'created >= "${lastWeekStart.toIso8601String()}" && created < "${lastWeekEnd.toIso8601String()}"'
-      );
-
-      final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/recharge_history/records'
-                '?filter=$encodedFilter'
-                '&perPage=500'
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        if (items.isNotEmpty) {
-          Map<String, double> userTotals = {};
-
-          for (var recharge in items) {
-            final userId = recharge['userId'];
-            final amount = (recharge['diamond_amount'] as num).toDouble();
-            userTotals[userId] = (userTotals[userId] ?? 0) + amount;
-          }
-
-          var topEntry = userTotals.entries
-              .reduce((a, b) => a.value > b.value ? a : b);
-
-          // Always verify/create badge for top recharger
-          await _verifyBillionaireBadge(topEntry.key);
-
-          final userResponse = await http.get(
-            Uri.parse('http://145.223.21.62:8090/api/collections/users/records/${topEntry.key}'),
-          );
-
-          if (userResponse.statusCode == 200) {
-            final userData = json.decode(userResponse.body);
-            setState(() {
-              lastWeekTopRecharger = {
-                'userDetails': userData,
-                'total': topEntry.value,
-              };
-            });
-          }
-        }
-      }
-    } catch (e) {
-      print('Error fetching last week top recharger: $e');
-    }
-  }
-
-  Future<void> _fetchUserDetailsInBatches(Set<String> userIds) async {
-    final batches = <List<String>>[];
-    final batchSize = 20;
-    final ids = userIds.toList();
-
-    for (var i = 0; i < ids.length; i += batchSize) {
-      batches.add(ids.skip(i).take(batchSize).toList());
-    }
-
-    await Future.wait(
-      batches.map((batch) async {
-        await Future.wait(
-          batch.map((userId) async {
-            if (userDetails.containsKey(userId)) return;
-
-            try {
-              final response = await http.get(
-                Uri.parse('http://145.223.21.62:8090/api/collections/users/records/$userId'),
-              );
-
-              if (response.statusCode == 200) {
-                final userData = json.decode(response.body);
-                userDetails[userId] = userData;
-              }
-            } catch (e) {
-              print('Error fetching user $userId: $e');
-            }
-          }),
-        );
-      }),
-    );
-  }
-
-  Future<List<dynamic>> _fetchAllPagesOptimized() async {
-    final futures = <Future<List<dynamic>>>[];
-    final perPage = 500;
-
-    final initialResponse = await http.get(
-      Uri.parse('http://145.223.21.62:8090/api/collections/recharge_history/records?page=1&perPage=$perPage'),
-    );
-
-    if (initialResponse.statusCode != 200) return [];
-
-    final initialData = json.decode(initialResponse.body);
-    final totalPages = initialData['totalPages'] as int;
-
-    for (var page = 1; page <= totalPages; page++) {
-      futures.add(
-        http.get(Uri.parse(
-            'http://145.223.21.62:8090/api/collections/recharge_history/records?page=$page&perPage=$perPage'
-        )).then((response) {
-          if (response.statusCode == 200) {
-            final data = json.decode(response.body);
-            return data['items'] as List;
-          }
-          return <dynamic>[];
-        }),
-      );
-    }
-
-    final results = await Future.wait(futures);
-    return results.expand((items) => items).toList();
-  }
-
-  Future<void> _fetchRechargeHistory() async {
-    try {
-      final recharges = await _fetchAllPagesOptimized();
-      final rankings = await compute(_calculateAllRankings, recharges);
-
-      final allUserIds = <String>{};
-      rankings.values.forEach((rankingList) {
-        rankingList.forEach((ranking) {
-          allUserIds.add(ranking['userId'] as String);
-        });
-      });
-
-      await _fetchUserDetailsInBatches(allUserIds);
-
-      void addUserDetailsToRankings(List<Map<String, dynamic>> rankings) {
-        for (var ranking in rankings) {
-          ranking['userDetails'] = userDetails[ranking['userId']];
-        }
-      }
-
-      addUserDetailsToRankings(rankings['daily']!);
-      addUserDetailsToRankings(rankings['weekly']!);
-      addUserDetailsToRankings(rankings['monthly']!);
-
-      setState(() {
-        dailyRankings = rankings['daily']!;
-        weeklyRankings = rankings['weekly']!;
-        monthlyRankings = rankings['monthly']!;
-      });
-    } catch (e) {
-      print('Error in _fetchRechargeHistory: $e');
-    }
   }
 
   @override
@@ -670,46 +542,4 @@ class _RechargeRankingsState extends State<RechargeRankings>
     _tabController.dispose();
     super.dispose();
   }
-}
-
-// Isolate function for calculating rankings
-Map<String, List<Map<String, dynamic>>> _calculateAllRankings(List<dynamic> recharges) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final tomorrow = today.add(Duration(days: 1));
-  final weekAgo = now.subtract(Duration(days: 7));
-  final monthStart = DateTime(now.year, now.month, 1);
-  final nextMonth = DateTime(now.year, now.month + 1, 1);
-
-  List<Map<String, dynamic>> calculatePeriodRankings(
-      bool Function(DateTime) dateFilter,
-      ) {
-    Map<String, double> userTotals = {};
-
-    for (var recharge in recharges) {
-      final rechargeDate = DateTime.parse(recharge['created']);
-      if (!dateFilter(rechargeDate)) continue;
-
-      final userId = recharge['userId'];
-      final amount = (recharge['diamond_amount'] as num).toDouble();
-      userTotals[userId] = (userTotals[userId] ?? 0) + amount;
-    }
-
-    return userTotals.entries
-        .map((e) => {'userId': e.key, 'total': e.value})
-        .toList()
-      ..sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
-  }
-
-  return {
-    'daily': calculatePeriodRankings(
-          (date) => date.isAfter(today) && date.isBefore(tomorrow),
-    ),
-    'weekly': calculatePeriodRankings(
-          (date) => date.isAfter(weekAgo) && date.isBefore(tomorrow),
-    ),
-    'monthly': calculatePeriodRankings(
-          (date) => date.isAfter(monthStart) && date.isBefore(nextMonth),
-    ),
-  };
 }

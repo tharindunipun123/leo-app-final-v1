@@ -9,6 +9,9 @@ import 'TopRecharger.dart';
 import 'TopStar.dart';
 import 'package:country_picker/country_picker.dart';
 
+// Add this constant at the top of your file
+const String ROOM_API_URL = 'http://145.223.21.62:6003';
+
 class TopRoomCard extends StatelessWidget {
   final Map<String, dynamic> roomDetails;
   final double totalAmount;
@@ -80,7 +83,6 @@ class TopRoomCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      //Icon(Icons.star, color: Colors.amber, size: 16),
                       SizedBox(width: 4),
                       Text(
                         'Last Week\'s Top Room',
@@ -152,7 +154,6 @@ class TopRoomCard extends StatelessWidget {
   }
 }
 
-
 class GlobalRanking extends StatefulWidget {
   const GlobalRanking({Key? key}) : super(key: key);
 
@@ -161,57 +162,378 @@ class GlobalRanking extends StatefulWidget {
 }
 
 class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProviderStateMixin {
-
+  late TabController _tabController;
+  String currentCategory = 'TopRooms';
+  bool isLoading = true;
   String refreshMessage = '';
-  late TabController _timeTabController;
-  String currentCategory = 'TopRooms'; // Default category
-  Map<String, double> diamondAmounts = {};
-  bool isLoading = true; // Holds diamond values for gifts
+
+  // Rankings data
   Map<String, dynamic>? lastWeekTopRoom;
-  //CountryFlag countryFlag = CountryFlag();
+  List<Map<String, dynamic>> dailyRankings = [];
+  List<Map<String, dynamic>> weeklyRankings = [];
+  List<Map<String, dynamic>> monthlyRankings = [];
+
+  // Cache mechanism
+  static Map<String, List<Map<String, dynamic>>> _rankingsCache = {};
+  static Map<String, DateTime> _lastFetchTime = {};
+  static const cacheDuration = Duration(minutes: 5);
 
   @override
   void initState() {
     super.initState();
-    _timeTabController = TabController(length: 3, vsync: this);
-    _timeTabController.addListener(_handleTabChange);
-    _updateRefreshMessage(); // Initialize the message
-    _loadGiftDiamondAmounts();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChange);
+    _updateRefreshMessage();
+    _loadData();
   }
 
-
   void _handleTabChange() {
-    if (_timeTabController.indexIsChanging) {
+    if (_tabController.indexIsChanging) {
       _updateRefreshMessage();
+      _loadData();
     }
   }
 
-  Future<void> _fetchGiftDiamondAmounts() async {
+  void _updateRefreshMessage() {
+    setState(() {
+      switch (_tabController.index) {
+        case 0:
+          refreshMessage = 'This ranking will refresh every day at 00:00 (GMT+5:30)';
+          break;
+        case 1:
+          refreshMessage = 'This ranking will refresh every Sunday at 00:00 (GMT+5:30)';
+          break;
+        case 2:
+          refreshMessage = 'This ranking will refresh at the end of every month at 00:00 (GMT+5:30)';
+          break;
+      }
+    });
+  }
+
+  Future<void> _loadData() async {
+    if (!mounted) return;
+
+    setState(() => isLoading = true);
+
     try {
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/gifts/records'),
-      );
+      // Load data based on current tab
+      switch (_tabController.index) {
+        case 0:
+          await _fetchDailyRankings();
+          break;
+        case 1:
+          await _fetchWeeklyRankings();
+          break;
+        case 2:
+          await _fetchMonthlyRankings();
+          break;
+      }
+
+      // Always fetch last week's top room
+      await _fetchLastWeekTopRoom();
+    } catch (e) {
+      print('Error loading data: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _fetchDailyRankings() async {
+    if (_isCacheValid('daily')) {
+      setState(() {
+        dailyRankings = _rankingsCache['daily'] ?? [];
+      });
+      return;
+    }
+
+    try {
+      final response = await http.get(Uri.parse('$ROOM_API_URL/api/rooms/daily'));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        setState(() {
-          diamondAmounts = Map.fromEntries(
-            items.map((item) => MapEntry(
-              item['giftname'],
-              (item['diamond_amount'] as num).toDouble(),
-            )),
-          );
-        });
-      } else {
-        throw Exception('Failed to fetch gift diamond amounts.');
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            dailyRankings = List<Map<String, dynamic>>.from(data['data']);
+            _rankingsCache['daily'] = dailyRankings;
+            _lastFetchTime['daily'] = DateTime.now();
+          });
+        }
       }
     } catch (e) {
-      print('Error fetching diamond amounts: $e');
+      print('Error fetching daily rankings: $e');
     }
   }
 
+  Future<void> _fetchWeeklyRankings() async {
+    if (_isCacheValid('weekly')) {
+      setState(() {
+        weeklyRankings = _rankingsCache['weekly'] ?? [];
+      });
+      return;
+    }
+
+    try {
+      final response = await http.get(Uri.parse('$ROOM_API_URL/api/rooms/weekly'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            weeklyRankings = List<Map<String, dynamic>>.from(data['data']);
+            _rankingsCache['weekly'] = weeklyRankings;
+            _lastFetchTime['weekly'] = DateTime.now();
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching weekly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchMonthlyRankings() async {
+    if (_isCacheValid('monthly')) {
+      setState(() {
+        monthlyRankings = _rankingsCache['monthly'] ?? [];
+      });
+      return;
+    }
+
+    try {
+      final response = await http.get(Uri.parse('$ROOM_API_URL/api/rooms/monthly'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            monthlyRankings = List<Map<String, dynamic>>.from(data['data']);
+            _rankingsCache['monthly'] = monthlyRankings;
+            _lastFetchTime['monthly'] = DateTime.now();
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching monthly rankings: $e');
+    }
+  }
+
+  Future<void> _fetchLastWeekTopRoom() async {
+    try {
+      final response = await http.get(Uri.parse('$ROOM_API_URL/api/rooms/last-week'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null && data['data'].isNotEmpty) {
+          final topRoom = data['data'][0];
+          setState(() {
+            lastWeekTopRoom = {
+              'roomDetails': topRoom['roomDetails'],
+              'total': topRoom['total'],
+            };
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching last week top room: $e');
+    }
+  }
+
+  bool _isCacheValid(String key) {
+    final lastFetch = _lastFetchTime[key];
+    if (lastFetch == null) return false;
+    return DateTime.now().difference(lastFetch) < cacheDuration;
+  }
+
+  Widget _buildRankingList(List<Map<String, dynamic>> rankings) {
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.orange.withOpacity(0.1),
+                Colors.red.withOpacity(0.1),
+              ],
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.grey[300]!,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Text(
+            refreshMessage,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: rankings.length,
+            itemBuilder: (context, index) {
+              final ranking = rankings[index];
+              final roomDetails = ranking['roomDetails'];
+              final ownerDetails = ranking['ownerDetails'];
+
+              if (roomDetails == null) return SizedBox.shrink();
+
+              return Container(
+                margin: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    // Rank number/medal
+                    Container(
+                      width: 30,
+                      margin: EdgeInsets.only(right: 12),
+                      child: index < 3
+                          ? Image.asset('assets/images/medal${index + 1}.png')
+                          : Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+
+                    // Room image
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: 'http://145.223.21.62:8090/api/files/${roomDetails['collectionId']}/${roomDetails['id']}/${roomDetails['group_photo']}',
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          errorWidget: (context, url, error) => Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(width: 12),
+
+                    // Room details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            roomDetails['voice_room_name'] ?? 'Unnamed Room',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(2),
+                                  border: Border.all(
+                                    color: Colors.grey[300]!,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: _buildCountryFlag(roomDetails['voiceRoom_country']),
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  roomDetails['team_moto'] ?? '',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Diamond amount
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/diamond.png',
+                          width: 16,
+                          height: 16,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          '${ranking['total'].toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCountryFlag(String? countryName) {
+    if (countryName == null || countryName.isEmpty) {
+      return Icon(
+        Icons.flag_outlined,
+        size: 12,
+        color: Colors.grey[400],
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: _getFlagUrl(countryName),
+      fit: BoxFit.cover,
+      placeholder: (context, url) => Container(
+        color: Colors.grey[200],
+      ),
+      errorWidget: (context, url, error) => Container(
+        color: Colors.grey[100],
+        child: Icon(
+          Icons.flag_outlined,
+          size: 12,
+          color: Colors.grey[400],
+        ),
+      ),
+    );
+  }
 
   String _getFlagUrl(String? countryName) {
     if (countryName == null || countryName.isEmpty) {
@@ -230,476 +552,6 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     return 'https://flagcdn.com/w320/xx.png'; // Fallback flag
   }
 
-
-  Future<void> _fetchLastWeekTopRoom() async {
-    try {
-      final now = DateTime.now();
-      final lastWeekStart = now.subtract(Duration(days: 14));
-      final lastWeekEnd = now.subtract(Duration(days: 7));
-
-      final encodedFilter = Uri.encodeComponent(
-          'created >= "${lastWeekStart.toIso8601String()}" && created < "${lastWeekEnd.toIso8601String()}"'
-      );
-
-      final response = await http.get(
-        Uri.parse(
-            'http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'
-                '?filter=$encodedFilter'
-                '&perPage=500'
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final gifts = data['items'] as List;
-
-        Map<String, double> roomTotals = {};
-
-        for (var gift in gifts) {
-          final roomId = gift['voiceRoomId'];
-          final giftName = gift['giftname'];
-          final count = gift['gift_count'] as int;
-
-          if (diamondAmounts.containsKey(giftName)) {
-            final amount = diamondAmounts[giftName]!;
-            roomTotals[roomId] = (roomTotals[roomId] ?? 0) + (count * amount);
-          }
-        }
-
-        if (roomTotals.isNotEmpty) {
-          var topEntry = roomTotals.entries
-              .reduce((a, b) => a.value > b.value ? a : b);
-
-          final roomResponse = await http.get(
-            Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records/${topEntry.key}'),
-          );
-
-          if (roomResponse.statusCode == 200) {
-            final roomData = json.decode(roomResponse.body);
-            setState(() {
-              lastWeekTopRoom = {
-                'roomDetails': roomData,
-                'total': topEntry.value,
-              };
-            });
-          }
-        }
-      }
-    } catch (e) {
-      print('Error fetching last week top room: $e');
-    }
-  }
-
-  Future<void> _loadGiftDiamondAmounts() async {
-    try {
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/gifts/records'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-
-        setState(() {
-          diamondAmounts = Map.fromEntries(
-            items.map((gift) => MapEntry(
-              gift['giftname'],
-              (gift['diamond_amount'] as num).toDouble(),
-            )),
-          );
-          isLoading = false;
-        });
-
-        await _fetchLastWeekTopRoom();
-      }
-    } catch (e) {
-      print('Error loading gift diamond amounts: $e');
-      setState(() => isLoading = false);
-    }
-  }
-
-
-  Future<List<Map<String, dynamic>>> fetchTopRooms(String timeframe) async {
-    if (isLoading) {
-      return [];
-    }
-
-    try {
-      // Set timeframe filter
-      final now = DateTime.now();
-      final DateTime filterDate = switch(timeframe) {
-        'Daily' => DateTime(now.year, now.month, now.day),
-        'Weekly' => now.subtract(Duration(days: 7)),
-        'Monthly' => now.subtract(Duration(days: 30)),
-        _ => throw Exception('Invalid timeframe'),
-      };
-
-      // Fetch all gifts with their sending info
-      final response = await http.get(
-        Uri.parse('http://145.223.21.62:8090/api/collections/sending_recieving_gifts/records'),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to fetch gift records');
-      }
-
-      final data = json.decode(response.body);
-      final gifts = data['items'] as List;
-
-      // Calculate room totals
-      Map<String, double> roomTotals = {};
-      for (var gift in gifts) {
-        final giftDate = DateTime.parse(gift['created']);
-        if (giftDate.isAfter(filterDate)) {
-          final roomId = gift['voiceRoomId'];
-          final giftName = gift['giftname'];
-          final count = gift['gift_count'] as int;
-          final diamondAmount = diamondAmounts[giftName] ?? 0.0;
-
-          roomTotals[roomId] = (roomTotals[roomId] ?? 0.0) + (count * diamondAmount);
-        }
-      }
-
-      // Get room details for top rooms
-      List<Map<String, dynamic>> rankedRooms = [];
-      for (var entry in roomTotals.entries) {
-        final roomResponse = await http.get(
-          Uri.parse('http://145.223.21.62:8090/api/collections/voiceRooms/records/${entry.key}'),
-        );
-
-        if (roomResponse.statusCode == 200) {
-          final roomData = json.decode(roomResponse.body);
-          rankedRooms.add({
-            'roomDetails': roomData,
-            'totalDiamonds': entry.value,
-          });
-        }
-      }
-
-      // Sort and take top 100
-      rankedRooms.sort((a, b) =>
-          b['totalDiamonds'].compareTo(a['totalDiamonds'])
-      );
-      return rankedRooms.take(100).toList();
-
-    } catch (e) {
-      print('Error fetching top rooms: $e');
-      return [];
-    }
-  }
-
-  Widget _buildTimeMessage() {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.orange.withOpacity(0.1),
-            Colors.red.withOpacity(0.1),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.grey[300]!,
-            width: 1,
-          ),
-        ),
-      ),
-      child: Text(
-        refreshMessage,
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.grey[600],
-          fontWeight: FontWeight.w500,
-        ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  Widget _buildRankingList(String timeFrame) {
-
-    if (isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: fetchTopRooms(timeFrame),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading rankings',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          );
-        }
-
-        final rooms = snapshot.data ?? [];
-        if (rooms.isEmpty) {
-          return Center(
-            child: Text(
-              'No rankings available for this period',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: rooms.length,
-          itemBuilder: (context, index) {
-            final room = rooms[index]['roomDetails'];
-            final diamonds = rooms[index]['totalDiamonds'];
-            final countryCode = room['voiceRoom_country'].toString().toLowerCase();
-
-            return Container(
-              margin: EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  // Rank number/medal
-                  Container(
-                    width: 30,
-                    margin: EdgeInsets.only(right: 12),
-                    child: index < 3
-                        ? Image.asset('assets/images/medal${index + 1}.png')
-                        : Text(
-                      '${index + 1}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ),
-
-                  // Room image
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[200]!),
-                      image: DecorationImage(
-                        image: NetworkImage(
-                            'http://145.223.21.62:8090/api/files/voiceRooms/${room['id']}/${room['group_photo']}'
-                        ),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(width: 12),
-
-                  // Room details
-                  // Room details
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          room['voice_room_name'] ?? 'Unnamed Room', // Add null check with default value
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(2),
-                                border: Border.all(
-                                  color: Colors.grey[300]!,
-                                  width: 0.5,
-                                ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: CachedNetworkImage(
-                                imageUrl: _getFlagUrl(room['voiceRoom_country']),
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Colors.grey[200],
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: Colors.grey[100],
-                                  child: Icon(
-                                    Icons.flag_outlined,
-                                    size: 12,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                room['team_moto'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Diamond amount
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(
-                        'assets/images/diamond.png',
-                        width: 16,
-                        height: 16,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        '${diamonds.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSelectedCategory() {
-    switch (currentCategory) {
-      case 'TopRooms':
-        return Column(
-          children: [
-            _buildTimeMessage(),
-            Expanded(
-              child: TabBarView(
-                controller: _timeTabController,
-                children: [
-                  _buildRankingList('Daily'),
-                  _buildRankingList('Weekly'),
-                  _buildRankingList('Monthly'),
-                ],
-              ),
-            ),
-          ],
-        );
-      case 'TopGifters':
-        return RankingBottomSheet();
-      case 'TopStars':
-        return Topstar();
-      case 'Billionaires':
-        return RechargeRankings();
-      default:
-        return Center(
-          child: Text(
-            'Category not found',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-        );
-    }
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      child: TabBar(
-        controller: _timeTabController,
-        labelColor: Colors.blue,
-        unselectedLabelColor: Colors.grey,
-        tabs: const [
-          Tab(text: 'Today'),
-          Tab(text: 'This Week'),
-          Tab(text: 'This Month'),
-        ],
-      ),
-    );
-  }
-
-
-
-  void _updateRefreshMessage() {
-    setState(() {
-      switch (_timeTabController.index) {
-        case 0:
-          refreshMessage = 'This ranking will refresh every day at 00:00 (GMT+5:30)';
-          break;
-        case 1:
-          refreshMessage = 'This ranking will refresh every Sunday at 00:00 (GMT+5:30)';
-          break;
-        case 2:
-          refreshMessage = 'This ranking will refresh at the end of every month (GMT+5:30)';
-          break;
-      }
-    });
-  }
-
-  Widget _buildCategoryButton(String title, List<Color> gradientColors, String category) {
-    bool isSelected = currentCategory == category;
-
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            currentCategory = category;
-          });
-        },
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: isSelected ? 18 : 15,
-            vertical: isSelected ? 10 : 8,
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: gradientColors,
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: isSelected ? [
-              BoxShadow(
-                color: gradientColors[0].withOpacity(0.3),
-                blurRadius: 8,
-                offset: Offset(0, 4),
-              ),
-            ] : [],
-          ),
-          child: Text(
-            title,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              fontSize: isSelected ? 14 : 12,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -710,10 +562,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
         ),
         title: const Text(
           'Ranking',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
         actions: [
@@ -813,7 +662,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
                 ),
               ),
               child: TabBar(
-                controller: _timeTabController,
+                controller: _tabController,
                 labelColor: Colors.blue,
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: Colors.blue,
@@ -850,7 +699,83 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
     );
   }
 
-  // Show the popup with a smooth fade animation
+  Widget _buildSelectedCategory() {
+    switch (currentCategory) {
+      case 'TopRooms':
+        return Column(
+          children: [
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildRankingList(dailyRankings),
+                  _buildRankingList(weeklyRankings),
+                  _buildRankingList(monthlyRankings),
+                ],
+              ),
+            ),
+          ],
+        );
+      case 'TopGifters':
+        return RankingBottomSheet();
+      case 'TopStars':
+        return Topstar();
+      case 'Billionaires':
+        return RechargeRankings();
+      default:
+        return Center(
+          child: Text('Category not found', style: TextStyle(color: Colors.grey[600])),
+        );
+    }
+  }
+
+  Widget _buildCategoryButton(String title, List<Color> gradientColors, String category) {
+    bool isSelected = currentCategory == category;
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            currentCategory = category;
+          });
+        },
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isSelected ? 18 : 15,
+            vertical: isSelected ? 10 : 8,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected
+                ? [
+              BoxShadow(
+                color: gradientColors[0].withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ]
+                : [],
+          ),
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              fontSize: isSelected ? 14 : 12,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void showRankingRewardPopup(BuildContext context) {
     showGeneralDialog(
       context: context,
@@ -875,7 +800,7 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
 
   @override
   void dispose() {
-    _timeTabController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 }
