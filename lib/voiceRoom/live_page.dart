@@ -1704,7 +1704,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 width: 35, // Reduced from 30
                 height: 35, // Reduced from 30
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.8),
+                  color: Colors.black.withOpacity(0.6),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
