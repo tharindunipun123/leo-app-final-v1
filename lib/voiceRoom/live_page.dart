@@ -63,8 +63,24 @@ class LivePage extends StatefulWidget {
     required this.username1, required this.userId
   }) : super(key: key);
 
+  static void handleLogout(BuildContext context) {
+    print('Attempting to find LivePageState...'); // Debug log
+    final LivePageState? state = context.findAncestorStateOfType<LivePageState>();
+    if (state != null) {
+      print('LivePageState found, calling _handleLogout'); // Debug log
+      state._handleLogout();
+    } else {
+      print('LivePageState not found!'); // Debug log
+      // If state not found, find the navigator and pop
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   @override
   State<StatefulWidget> createState() => LivePageState();
+
+
+
 }
 
 class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin {
@@ -98,7 +114,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   String? _language;
   int?  _voiceroomid;
   static const String POCKETBASE_URL = 'http://145.223.21.62:8090'; // Replace with your actual PocketBase URL
-
+  bool _isLoading = false;
   @override
   void initState() {
     super.initState();
@@ -1412,6 +1428,39 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     );
   }
 
+  Widget _buildLoadingOverlay() {
+    return _isLoading
+        ? Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+              //SizedBox(height: 16),
+              // Text(
+              //   'Loading...',
+              //   style: TextStyle(
+              //     color: Colors.white,
+              //     fontSize: 16,
+              //   ),
+              // ),
+            ],
+          ),
+        ),
+      ),
+    )
+        : const SizedBox.shrink();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1888,14 +1937,29 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                       children: [
                         // Room Image
                         GestureDetector(
-                          onTap: () {
+                          onTap: () async {
+                            if (_isLoading) return; // Prevent tap if loading
+
                             final now = DateTime.now();
                             if (_lastTapTime != null &&
                                 now.difference(_lastTapTime!) < const Duration(milliseconds: 500)) {
                               return;
                             }
                             _lastTapTime = now;
-                            _showBottomSheet(context, widget.roomID);
+
+                            setState(() {
+                              _isLoading = true;
+                            });
+
+                            try {
+                              await _showBottomSheet(context, widget.roomID);
+                            } finally {
+                              if (mounted) {
+                                setState(() {
+                                  _isLoading = false;
+                                });
+                              }
+                            }
                           },
                           child: Container(
                             width: 44,
@@ -2064,6 +2128,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
+            _buildLoadingOverlay(),
           ],
         ),
       ),

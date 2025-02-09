@@ -330,7 +330,9 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
           setState(() {
             lastWeekTopRoom = {
               'roomDetails': topRoom['roomDetails'],
-              'total': topRoom['total'],
+              'total': (topRoom['total'] is int)
+                  ? topRoom['total'].toDouble()
+                  : (topRoom['total'] ?? 0.0),
             };
           });
         }
@@ -648,7 +650,9 @@ class _GlobalRankingState extends State<GlobalRanking> with SingleTickerProvider
           if (currentCategory == 'TopRooms' && lastWeekTopRoom != null)
             TopRoomCard(
               roomDetails: lastWeekTopRoom!['roomDetails'],
-              totalAmount: lastWeekTopRoom!['total'],
+              totalAmount: (lastWeekTopRoom!['total'] is int)
+                  ? (lastWeekTopRoom!['total'] as int).toDouble()
+                  : (lastWeekTopRoom!['total'] as double),
             ),
 
           // TabBar for TopRooms category

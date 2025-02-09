@@ -296,7 +296,9 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
           setState(() {
             lastWeekTopGifter = {
               'userDetails': topGifter['userDetails'],
-              'total': topGifter['total'],
+              'total': (topGifter['total'] is int)
+                  ? topGifter['total'].toDouble()
+                  : (topGifter['total'] ?? 0.0),
             };
           });
         }
@@ -319,7 +321,9 @@ class _RankingBottomSheetState extends State<RankingBottomSheet> with SingleTick
           if (lastWeekTopGifter != null)
             TopGifterCard(
               userDetails: lastWeekTopGifter!['userDetails'],
-              totalAmount: lastWeekTopGifter!['total'],
+              totalAmount: (lastWeekTopGifter!['total'] is int)
+                  ? (lastWeekTopGifter!['total'] as int).toDouble()
+                  : (lastWeekTopGifter!['total'] as double? ?? 0.0),
             ),
           // Tab bar
           Container(

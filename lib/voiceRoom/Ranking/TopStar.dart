@@ -224,6 +224,30 @@ class _TopstarState extends State<Topstar> with SingleTickerProviderStateMixin {
     }
   }
 
+
+  Future<void> _fetchLastWeekTopGifter() async {
+    try {
+      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/last-week'));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null && data['data'].isNotEmpty) {
+          final topStar = data['data'][0];
+          setState(() {
+            lastWeekTopGifter = {
+              'userDetails': topStar['userDetails'],
+              'total': (topStar['total'] is int)
+                  ? (topStar['total'] as int).toDouble()
+                  : (topStar['total'] as double? ?? 0.0),
+            };
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching last week top star: $e');
+    }
+  }
+
   Future<void> _fetchWeeklyRankings() async {
     try {
       final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/weekly'));
@@ -256,26 +280,7 @@ class _TopstarState extends State<Topstar> with SingleTickerProviderStateMixin {
     }
   }
 
-  Future<void> _fetchLastWeekTopGifter() async {
-    try {
-      final response = await http.get(Uri.parse('$STAR_API_URL/api/stars/last-week'));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && data['data'] != null && data['data'].isNotEmpty) {
-          final topGifter = data['data'][0];
-          setState(() {
-            lastWeekTopGifter = {
-              'userDetails': topGifter['userDetails'],
-              'total': topGifter['total'],
-            };
-          });
-        }
-      }
-    } catch (e) {
-      print('Error fetching last week top gifter: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +289,9 @@ class _TopstarState extends State<Topstar> with SingleTickerProviderStateMixin {
         if (lastWeekTopGifter != null)
           TopGifterCard(
             userDetails: lastWeekTopGifter!['userDetails'],
-            totalAmount: lastWeekTopGifter!['total'],
+            totalAmount: (lastWeekTopGifter!['total'] is int)
+                ? (lastWeekTopGifter!['total'] as int).toDouble()
+                : (lastWeekTopGifter!['total'] as double? ?? 0.0),
           ),
         Container(
           margin: EdgeInsets.only(top: 8),

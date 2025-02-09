@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'live_page.dart';
 import 'setadmin.dart';
 import 'dismissadmin.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:zego_uikit/zego_uikit.dart';
+import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 class MemberListScreen extends StatefulWidget {
   final String voiceRoomId;
@@ -137,6 +142,52 @@ class _MemberListScreenState extends State<MemberListScreen> {
     }
   }
 
+  Future<void> _deleteDuplicateOnlineUserRecords(String userId, String roomId) async {
+    const String baseUrl = 'http://145.223.21.62:8090/api/collections/online_users/records';
+
+    try {
+      // Step 1: Fetch all records for this user and room
+      final filter = Uri.encodeComponent('userId="$userId" && voiceRoomId="$roomId"');
+      final response = await http.get(
+        Uri.parse('$baseUrl?filter=$filter'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final records = data['items'] as List;
+
+        if (records.isEmpty) {
+          print('No records found for user $userId in room $roomId');
+          return;
+        }
+
+        print('Found ${records.length} records to delete');
+
+        // Step 2: Delete all records found
+        for (var record in records) {
+          final recordId = record['id'];
+          final deleteResponse = await http.delete(
+            Uri.parse('$baseUrl/$recordId'),
+            headers: {'Content-Type': 'application/json'},
+          );
+
+          if (deleteResponse.statusCode == 204 || deleteResponse.statusCode == 200) {
+            print('Successfully deleted record: $recordId');
+          } else {
+            print('Failed to delete record $recordId: ${deleteResponse.statusCode}');
+          }
+        }
+      } else {
+        print('Failed to fetch records: ${response.statusCode}');
+        throw Exception('Failed to fetch online user records');
+      }
+    } catch (e) {
+      print('Error in _deleteDuplicateOnlineUserRecords: $e');
+      rethrow;
+    }
+  }
+
   Future<void> _leaveRoom(String userId, String joinedUserId) async {
     try {
       // Delete from joined_users
@@ -158,6 +209,75 @@ class _MemberListScreenState extends State<MemberListScreen> {
     }
   }
 
+
+  Future<void> _leaving() async {
+    try {
+      Map<String, dynamic>? currentUser;
+      try {
+        currentUser = usersList.firstWhere(
+              (user) => user['id'] == widget.currentUserId,
+        );
+      } catch (e) {
+        currentUser = null;
+      }
+
+      if (currentUser != null) {
+        final response = await http.delete(
+          Uri.parse('$baseUrl/api/collections/joined_users/records/${currentUser['joinedUserId']}'),
+        );
+
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Successfully left the room'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error leaving room: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to leave room'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+
+  Future<void> updateEndTime(String userId, String voiceRoomId) async {
+    try {
+      final filter = Uri.encodeComponent('UserID="$userId" && voiceRoom_id="$voiceRoomId"');
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/collections/level_Timer/records?filter=$filter'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final records = data['items'] ?? [];
+        final record = records.firstWhere(
+              (r) => r['End_Time'] == null || r['End_Time'] == "",
+          orElse: () => null,
+        );
+
+        if (record != null) {
+          await http.patch(
+            Uri.parse('$baseUrl/api/collections/level_Timer/records/${record['id']}'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'End_Time': DateTime.now().toIso8601String(),
+            }),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error updating end time: $e');
+    }
+  }
 
   Future<void> _joinRoom(String roomId, String userId) async {
     try {
@@ -305,6 +425,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                   onSelected: (value) async {
                     // Replace the leave logic section with this corrected version
                     if (value == 'leave') {
+
                       // Show confirmation dialog
                       final shouldLeave = await showDialog<bool>(
                         context: context,
@@ -318,8 +439,20 @@ class _MemberListScreenState extends State<MemberListScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                Navigator.pop(context, true); // Close dialog
-                                Navigator.of(context, rootNavigator: true).pop(); // Close bottom sheet
+                                _deleteDuplicateOnlineUserRecords(widget.currentUserId, widget.voiceRoomId);
+                                _leaving();
+                                print('Leave button pressed'); // Debug log
+                                Navigator.pop(context,true); // Close the dialog
+                                // Try to get the parent context
+                                final parentContext = context.findAncestorStateOfType<LivePageState>()?.context;
+                                if (parentContext != null) {
+                                  print('Found parent context'); // Debug log
+                                  LivePage.handleLogout(parentContext);
+                                } else {
+                                  print('Parent context not found, using current context'); // Debug log
+                                  LivePage.handleLogout(context);
+                                }
+                                Navigator.of(context, rootNavigator: true).pop(); // Close member list sheet
                               },
                               child: Text('Leave', style: TextStyle(color: Colors.red)),
                             ),
@@ -328,41 +461,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                       );
 
                       if (shouldLeave == true) {
-                        try {
-                          Map<String, dynamic>? currentUser;
-                          try {
-                            currentUser = usersList.firstWhere(
-                                  (user) => user['id'] == widget.currentUserId,
-                            );
-                          } catch (e) {
-                            currentUser = null;
-                          }
 
-                          if (currentUser != null) {
-                            final response = await http.delete(
-                              Uri.parse('$baseUrl/api/collections/joined_users/records/${currentUser['joinedUserId']}'),
-                            );
-
-                            if (response.statusCode == 200) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Successfully left the room'),
-                                  backgroundColor: Colors.red,
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            }
-                          }
-                        } catch (e) {
-                          print('Error leaving room: $e');
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to leave room'),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
                       }
                     }
                   },

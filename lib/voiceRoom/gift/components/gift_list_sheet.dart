@@ -308,6 +308,9 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
         }),
       );
 
+      print('Online users response status: ${onlineUsersResponse.statusCode}');
+      print('Online users response body: ${onlineUsersResponse.body}');
+
       if (onlineUsersResponse.statusCode == 200) {
         final onlineUsersData = json.decode(onlineUsersResponse.body);
         print('Online users data: ${onlineUsersData['items']}');
@@ -348,10 +351,13 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
               Uri.parse('$pocketbaseUrl/api/collections/users/records/$userId'),
             );
 
+            print('User response status: ${userResponse.statusCode}');
+            print('User response body: ${userResponse.body}');
+
             if (userResponse.statusCode == 200) {
               final userData = json.decode(userResponse.body);
               final user = User.fromJson(userData);
-              print('Successfully loaded user: ${user.username}');
+              print('Successfully loaded user: ${user.username} with ID: ${user.id}');
               loadedUsers.add(user);
             } else {
               print('Failed to load user $userId: ${userResponse.statusCode}');
@@ -362,6 +368,10 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
         }
 
         print('Total users loaded from room: ${loadedUsers.length}');
+        print('Loaded users details:');
+        for (var user in loadedUsers) {
+          print('- User: ${user.username}, ID: ${user.id}');
+        }
 
         if (mounted) {
           setState(() {
@@ -380,7 +390,6 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
       }
     }
   }
-
 
   Future<bool> _checkAndUpdateBalance(double giftCost) async {
     if (userBalance == null || userBalance! < giftCost) return false;
@@ -563,10 +572,14 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
   // }
 
   Future<void> sendGift(ZegoGiftItem giftItem, int count, User receiver) async {
-    // Create a key to manage snackbar
-    final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
     try {
+      print('Sending gift with following details:');
+      print('Receiver ID: ${receiver.id}');
+      print('Receiver Username: ${receiver.username}');
+      print('Gift Name: ${giftItem.name}');
+      print('Count: $count');
+      print('Room ID: ${widget.roomId}');
+
       if (!_validateGiftItem(giftItem)) {
         throw Exception('Invalid gift data');
       }
@@ -574,7 +587,6 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
       final totalCost = giftItem.weight * count.toDouble();
       final rewardAmount = totalCost * 0.4;
 
-      // Check balance first
       if (!await _checkAndUpdateBalance(totalCost)) {
         if (mounted) {
           _showSnackBar('Insufficient balance!');
@@ -582,12 +594,10 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
         return;
       }
 
-      // Close bottom sheet before playing animation
       if (mounted) {
         Navigator.of(context).pop();
       }
 
-      // Play animation first
       try {
         await _handleGiftPlayback(giftItem, count);
       } catch (e) {
@@ -598,28 +608,32 @@ class _ZegoGiftSheetState extends State<ZegoGiftSheet> with SingleTickerProvider
         return;
       }
 
-      // Send gift data to server after animation
+      final payload = {
+        'sender_user_id': loggedUserId,
+        'reciever_user_id': receiver.id,  // Using correct spelling to match database
+        'gifts_url': giftItem.sourceURL,
+        'giftname': giftItem.name,
+        'gift_count': count,
+        'voiceRoomId': widget.roomId
+      };
+
+      print('Sending request with payload:');
+      print(json.encode(payload));
+
       final response = await http.post(
           Uri.parse('http://145.223.21.62:6003/api/gifts/send'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'sender_user_id': loggedUserId,
-            'receiver_user_id': receiver.id,
-            'gifts_url': giftItem.sourceURL,
-            'giftname': giftItem.name,
-            'gift_count': count,
-            'voiceRoomId': widget.roomId
-          })
+          body: json.encode(payload)
       );
+
+      print('Server response status: ${response.statusCode}');
+      print('Server response body: ${response.body}');
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        // Update receiver's wallet
         await _updateReceiverWallet(receiver.id, rewardAmount);
-
         if (mounted) {
-          // Show success message with delay to avoid overlap
           Future.delayed(
               const Duration(milliseconds: 500),
                   () => _showSnackBar('Gift sent successfully!')

@@ -295,7 +295,9 @@ class _RechargeRankingsState extends State<RechargeRankings>
           setState(() {
             lastWeekTopRecharger = {
               'userDetails': topRecharger['userDetails'],
-              'total': topRecharger['total'],
+              'total': (topRecharger['total'] is int)
+                  ? (topRecharger['total'] as int).toDouble()
+                  : (topRecharger['total'] as double? ?? 0.0),
             };
           });
           await _verifyBillionaireBadge(topRecharger['userDetails']['id']);
@@ -346,8 +348,11 @@ class _RechargeRankingsState extends State<RechargeRankings>
         if (lastWeekTopRecharger != null)
           TopRechargerCard(
             userDetails: lastWeekTopRecharger!['userDetails'],
-            totalAmount: lastWeekTopRecharger!['total'],
+            totalAmount: (lastWeekTopRecharger!['total'] is int)
+                ? (lastWeekTopRecharger!['total'] as int).toDouble()
+                : (lastWeekTopRecharger!['total'] as double? ?? 0.0),
           ),
+
         Container(
           margin: EdgeInsets.only(top: 8),
           child: TabBar(
