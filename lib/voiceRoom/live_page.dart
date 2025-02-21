@@ -7,6 +7,7 @@ import './gift/gift.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_image_carousel_slider/image_carousel_slider.dart';
+import 'dart:math' show pi, cos, sin;
 import 'package:flutter_image_carousel_slider/image_carousel_slider_left_right_show.dart';
 // Package imports:
 import 'package:zego_uikit/zego_uikit.dart';
@@ -28,6 +29,47 @@ import 'constants.dart';
 import 'media.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+
+// Add this class outside your LivePageState class
+class EmojiLayoutDelegate extends MultiChildLayoutDelegate {
+  final List<String> users;
+  final int itemCount;
+
+  EmojiLayoutDelegate({
+    required this.users,
+    required this.itemCount,
+  });
+
+  @override
+  void performLayout(Size size) {
+    final double centerX = size.width / 2;
+    final double centerY = size.height / 3;  // Show in upper third of screen
+    final double radius = 100.0;  // Radius of the circular arrangement
+
+    for (int i = 0; i < users.length; i++) {
+      if (hasChild(users[i])) {
+        final double angle = (2 * pi * i) / itemCount;
+        final double x = centerX + radius * cos(angle);
+        final double y = centerY + radius * sin(angle);
+
+        // Position each emoji
+        final Size childSize = layoutChild(users[i], BoxConstraints.loose(size));
+        positionChild(
+          users[i],
+          Offset(
+            x - childSize.width / 2,
+            y - childSize.height / 2,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRelayout(EmojiLayoutDelegate oldDelegate) {
+    return users != oldDelegate.users || itemCount != oldDelegate.itemCount;
+  }
+}
 
 class OnlineUser {
   final String id;
@@ -88,7 +130,13 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   final pb = PocketBase('http://145.223.21.62:8090');
   late UnsubscribeFunc? _unsubscribe;
   int userCount = 0; // Add this to track user count
-
+  Map<String, Timer> _emojiTimers = {};
+  Map<String, String> _currentEmojis = {};
+  final Map<String, Offset> _seatPositions = {};
+  bool _showEmoji = false;
+  Offset? _emojiPosition;
+  String? _currentEmoji;
+  Map<String, Widget> _activeEmojis = {};
 
   late IO.Socket socket;
   bool isConnecting = true;
@@ -120,6 +168,33 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     super.initState();
     _initializeSocket();
     _fetchInitialUsers();
+
+    socket.on('gifReaction', (data) {
+      print('Received emoji data: $data'); // Debug log
+
+      if (mounted) {
+        setState(() {
+          _activeEmojis[data['userId']] = Container(
+            width: 50,
+            height: 50,
+            child: Image.asset(
+              'assets/smile.gif',
+              fit: BoxFit.cover,
+            ),
+          );
+        });
+        // Remove after 2 seconds
+        _emojiTimers[data['userId']]?.cancel();
+        _emojiTimers[data['userId']] = Timer(Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _activeEmojis.remove(data['userId']);
+            });
+          }
+        });
+      }
+    });
+
     //_createOnlineUserRecord().then((_) => _fetchInitialUsers());
     _checkAdminStatus();
     _fetchOnlineUsers();
@@ -151,7 +226,7 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       upperBound: 1.2,
     )..repeat(reverse: true);
     //
-     _glowAnimation = Tween<double>(begin: 0.5, end: 1.2).animate(_controller);
+    _glowAnimation = Tween<double>(begin: 0.5, end: 1.2).animate(_controller);
     //
     // WidgetsBinding.instance.addPostFrameCallback((_) {
     //   // Get crown gift data
@@ -229,21 +304,21 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
       _handleLogout();
 
-        //
-        // // Finally, navigate back
-        //
-        //   Navigator.of(context).pop(); // Close current screen
-        //   Navigator.of(context).pop(); // Pop back to groups screen
-        //
-        //   // Show success message
-        //   if (context.mounted) {
-        //     ScaffoldMessenger.of(context).showSnackBar(
-        //       SnackBar(
-        //         content: Text('Group disbanded successfully'),
-        //         backgroundColor: Colors.green,
-        //       ),
-        //     );
-        //   }
+      //
+      // // Finally, navigate back
+      //
+      //   Navigator.of(context).pop(); // Close current screen
+      //   Navigator.of(context).pop(); // Pop back to groups screen
+      //
+      //   // Show success message
+      //   if (context.mounted) {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(
+      //         content: Text('Group disbanded successfully'),
+      //         backgroundColor: Colors.green,
+      //       ),
+      //     );
+      //   }
 
 
     } catch (e) {
@@ -1058,7 +1133,8 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
     }
 
-
+    _emojiTimers.forEach((userId, timer) => timer.cancel());
+    _emojiTimers.clear();
     socket.disconnect();
     super.dispose();
   }
@@ -1090,48 +1166,33 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
   }
 
   Widget foregroundBuilder(BuildContext context, Size size, ZegoUIKitUser? user, Map extraInfo) {
-    var userName = user?.name.isEmpty ?? true
-        ? Container()
-        : Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Text(
-        " ${user?.name}  " ?? "",
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white,
-          backgroundColor: Colors.blueAccent,
+    return Stack(
+      children: [
+        // Username text
+        if (user?.name != null && user!.name.isNotEmpty)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
 
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          decoration: TextDecoration.none,
-        ),
-      ),
+              color: Colors.blueAccent,
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                " ${user.name}  ",
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
-
-    if (!isAttributeHost(user?.inRoomAttributes.value)) {
-      return userName;
-    }
-
-    // var hostIconSize = Size(size.width / 3, size.height / 3);
-    // var hostIcon = Positioned(
-    //   bottom: 3,
-    //   right: 0,
-    //   child: Container(
-    //     width: hostIconSize.width,
-    //     height: hostIconSize.height,
-    //     decoration: const BoxDecoration(
-    //       image: DecorationImage(
-    //         image: AssetImage('assets/images1/king.png'),
-    //         fit: BoxFit.cover,
-    //       ),
-    //     ),
-    //   ),
-    // );
-
-    return Stack(children: [userName]);
   }
 
   // First, add a method to fetch joined users count
@@ -1399,33 +1460,70 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
 
   Widget _buildEmojiButton(String emoji) {
     return Container(
-      margin: EdgeInsets.all(4), // Reduced from 8
+      margin: EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12), // Reduced from 16
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            print('Selected emoji: $emoji');
+            print('Emitting emoji: $emoji'); // Debug log
+
+            // Emit the emoji reaction event to socket with all needed data
+            socket.emit('gifReaction', {
+              'roomId': widget.roomID,
+              'userId': widget.userId,
+              'userName': widget.username1,
+              'emoji': emoji,
+              'timestamp': DateTime.now().millisecondsSinceEpoch
+            });
+
+            // Don't show locally - wait for socket response
             Navigator.pop(context);
           },
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: EdgeInsets.all(8), // Reduced from 12
+            padding: EdgeInsets.all(8),
             child: Center(
               child: Text(
                 emoji,
-                style: TextStyle(
-                  fontSize: 24, // Reduced from 30
-                ),
+                style: TextStyle(fontSize: 24),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _showEmojiAnimation(String userId, String emoji) {
+    print('Showing emoji for user: $userId');
+
+    // Remove any existing emoji for this user
+    _emojiTimers[userId]?.cancel();
+
+    setState(() {
+      // Add new emoji widget to the map
+      _activeEmojis[userId] = Container(
+        width: 50,
+        height: 50,
+        child: Image.asset(
+          'assets/smile.gif',
+          fit: BoxFit.cover,
+        ),
+      );
+    });
+
+    // Remove after 2 seconds
+    _emojiTimers[userId] = Timer(Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _activeEmojis.remove(userId);
+        });
+      }
+    });
   }
 
   Widget _buildLoadingOverlay() {
@@ -1663,6 +1761,24 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
                 ),
               ),
             ),
+
+            if (_activeEmojis.isNotEmpty)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                child: CustomMultiChildLayout(
+                  delegate: EmojiLayoutDelegate(
+                    users: _activeEmojis.keys.toList(),
+                    itemCount: _activeEmojis.length,
+                  ),
+                  children: _activeEmojis.entries.map((entry) {
+                    return LayoutId(
+                      id: entry.key,
+                      child: entry.value,
+                    );
+                  }).toList(),
+                ),
+              ),
 
             // if (isConnecting)
             //   Positioned(
@@ -3318,9 +3434,9 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ..mediaPlayer.supportTransparent = true
       ..foreground = giftForeground()
       ..emptyAreaBuilder = mediaPlayer
-      // ..topMenuBar.buttons = [
-      //   ZegoLiveAudioRoomMenuBarButtonName.minimizingButton, // Keep only this button
-      // ]
+    // ..topMenuBar.buttons = [
+    //   ZegoLiveAudioRoomMenuBarButtonName.minimizingButton, // Keep only this button
+    // ]
       ..userAvatarUrl = _userAvatarUrl;
   }
 
@@ -3528,30 +3644,40 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
       ZegoUIKitUser? user,
       Map<String, dynamic> extraInfo,
       ) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white,
-          width: 2,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size.width / 2),
-        child: _userAvatarUrl != null
-            ? CachedNetworkImage(
-          imageUrl: _userAvatarUrl!,
-          width: size.width,
-          height: size.width,
-          fit: BoxFit.cover,
-          placeholder: (context, url) => CircularProgressIndicator(),
-          errorWidget: (context, url, error) => Icon(Icons.error),
-        )
-            : Container(
-          width: size.width,
-          height: size.width,
-          color: Colors.grey[300],
-          child: Icon(Icons.group, color: Colors.grey[400]),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size.width / 2),
+      child: Container(
+        width: size.width,
+        height: size.width,
+        child: Stack(
+          children: [
+            // Base avatar container
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+              ),
+              child: _userAvatarUrl != null
+                  ? CachedNetworkImage(
+                imageUrl: _userAvatarUrl!,
+                width: size.width,
+                height: size.width,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => CircularProgressIndicator(),
+                errorWidget: (context, url, error) => Icon(Icons.error),
+              )
+                  : Container(
+                color: Colors.grey[300],
+                child: Icon(Icons.group, color: Colors.grey[400]),
+              ),
+            ),
+
+            // Emoji overlay
+
+          ],
         ),
       ),
     );
@@ -3879,4 +4005,3 @@ class LivePageState extends State<LivePage> with SingleTickerProviderStateMixin 
     ));
   }
 }
-

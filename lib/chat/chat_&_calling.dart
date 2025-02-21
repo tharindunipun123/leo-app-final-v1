@@ -59,8 +59,8 @@ class ChatScreen1State extends State<ChatScreen1> with SingleTickerProviderState
       callService.setNavigatorKey(navigatorKey);
 
       await callService.init(
-        appID: 1382376685,
-        appSign: '0a9bce0b90584625b087d27e8e3c9a2a15ea28eb16119022da829f87c3763142',
+        appID: 1244136023,
+        appSign: '087a2a4ce49e2e91e175a2b0153b5638df2a65ce3d6b0a515cd743fbe62a6ea2',
         userID: userId,
         userName: userName,
         plugins: [ZegoUIKitSignalingPlugin()],
