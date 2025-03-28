@@ -9,11 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'chat/Status.dart';
 
 class HomeScreen extends StatefulWidget {
-  static final GlobalKey<_HomeScreenState> homeKey = GlobalKey<_HomeScreenState>();
+  static final GlobalKey<_HomeScreenState> homeKey =
+      GlobalKey<_HomeScreenState>();
   final String userId;
   final String username;
 
-  HomeScreen({required this.userId, required this.username}) : super(key: homeKey);  // Add the key here
+  HomeScreen({required this.userId, required this.username})
+      : super(key: homeKey); // Add the key here
 
   static void setBottomBarVisibility(bool visible) {
     homeKey.currentState?.setBottomNavVisibility(visible);
@@ -22,7 +24,6 @@ class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
-
 
 class _HomeScreenState extends State<HomeScreen> {
   String username = "user";
@@ -52,10 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Initialize _widgetOptions with required data
       _widgetOptions = [
-        ChatScreen1(),
+        ChatScreen1(
+          userId: widget.userId,
+        ),
         GroupsScreen(),
-        GameScreen(),
-        AccountScreen1(),
+        const GameScreen(),
+        const AccountScreen1(),
       ];
     });
   }
@@ -64,62 +67,64 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: _widgetOptions != null
+        child: _widgetOptions.isNotEmpty
             ? _widgetOptions.elementAt(_selectedIndex)
             : const CircularProgressIndicator(),
       ),
       bottomNavigationBar: _showBottomNav
           ? Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 20,
-              color: Colors.black.withOpacity(.1),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    blurRadius: 20,
+                    color: Colors.black.withOpacity(.1),
+                  )
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 15.0, vertical: 8),
+                  child: GNav(
+                    rippleColor: Colors.grey[300]!,
+                    hoverColor: Colors.grey[100]!,
+                    gap: 8,
+                    activeColor: Colors.blue[700],
+                    iconSize: 24,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    duration: const Duration(milliseconds: 400),
+                    tabBackgroundColor: Colors.blue[50]!,
+                    color: Colors.black,
+                    tabs: const [
+                      GButton(
+                        icon: LineIcons.comments,
+                        text: 'Chat',
+                      ),
+                      GButton(
+                        icon: LineIcons.users,
+                        text: 'Rooms',
+                      ),
+                      GButton(
+                        icon: LineIcons.gamepad,
+                        text: 'Game',
+                      ),
+                      GButton(
+                        icon: LineIcons.user,
+                        text: 'Account',
+                      ),
+                    ],
+                    selectedIndex: _selectedIndex,
+                    onTabChange: (index) {
+                      setState(() {
+                        _selectedIndex = index;
+                      });
+                    },
+                  ),
+                ),
+              ),
             )
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 8),
-            child: GNav(
-              rippleColor: Colors.grey[300]!,
-              hoverColor: Colors.grey[100]!,
-              gap: 8,
-              activeColor: Colors.blue[700],
-              iconSize: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              duration: const Duration(milliseconds: 400),
-              tabBackgroundColor: Colors.blue[50]!,
-              color: Colors.black,
-              tabs: const [
-                GButton(
-                  icon: LineIcons.comments,
-                  text: 'Chat',
-                ),
-                GButton(
-                  icon: LineIcons.users,
-                  text: 'Rooms',
-                ),
-                GButton(
-                  icon: LineIcons.gamepad,
-                  text: 'Game',
-                ),
-                GButton(
-                  icon: LineIcons.user,
-                  text: 'Account',
-                ),
-              ],
-              selectedIndex: _selectedIndex,
-              onTabChange: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-            ),
-          ),
-        ),
-      )
           : null,
     );
   }
@@ -217,13 +222,8 @@ class _HomeScreenState extends State<HomeScreen> {
 //   }
 // }
 
-
-
-
-
-
 class GameScreen extends StatelessWidget {
-  const GameScreen({Key? key}) : super(key: key);
+  const GameScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +236,7 @@ class GameScreen extends StatelessWidget {
             'assets/images/gameback.jpeg', // Replace with your actual asset path
             fit: BoxFit.cover,
           ),
-          SafeArea(
+          const SafeArea(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

@@ -5,6 +5,8 @@ import 'dart:math';
 import 'OtpScreen.dart';
 
 class PhoneNumberScreen extends StatefulWidget {
+  const PhoneNumberScreen({super.key});
+
   @override
   _PhoneNumberScreenState createState() => _PhoneNumberScreenState();
 }
@@ -49,7 +51,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                             ),
                           ),
                         ),
-                        SizedBox(height: 20),
+                        const SizedBox(height: 20),
                         Text(
                           'Enter your phone number',
                           style: TextStyle(
@@ -58,7 +60,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                             color: Colors.blue[700],
                           ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
                           'We\'ll send you a verification code',
                           style: TextStyle(
@@ -66,7 +68,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                             color: Colors.blue[600],
                           ),
                         ),
-                        SizedBox(height: 20),
+                        const SizedBox(height: 20),
                         Row(
                           children: [
                             GestureDetector(
@@ -76,34 +78,38 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                   showPhoneCode: true,
                                   onSelect: (Country country) {
                                     setState(() {
-                                      _selectedCountryCode = '+${country.phoneCode}';
+                                      _selectedCountryCode =
+                                          '+${country.phoneCode}';
                                       _selectedCountryFlag = country.flagEmoji;
                                     });
                                   },
                                 );
                               },
                               child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 16),
                                 decoration: BoxDecoration(
                                   color: Colors.grey[200],
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
                                   children: [
-                                    Text(_selectedCountryFlag, style: TextStyle(fontSize: 24)),
-                                    SizedBox(width: 8),
-                                    Text(_selectedCountryCode, style: TextStyle(fontSize: 16)),
-                                    Icon(Icons.arrow_drop_down),
+                                    Text(_selectedCountryFlag,
+                                        style: const TextStyle(fontSize: 24)),
+                                    const SizedBox(width: 8),
+                                    Text(_selectedCountryCode,
+                                        style: const TextStyle(fontSize: 16)),
+                                    const Icon(Icons.arrow_drop_down),
                                   ],
                                 ),
                               ),
                             ),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: TextField(
                                 controller: _phoneController,
                                 keyboardType: TextInputType.phone,
-                                style: TextStyle(fontSize: 18),
+                                style: const TextStyle(fontSize: 18),
                                 decoration: InputDecoration(
                                   hintText: 'Phone Number',
                                   filled: true,
@@ -117,20 +123,23 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                             ),
                           ],
                         ),
-                        Spacer(),
+                        const Spacer(),
                         Center(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue[700],
-                              padding: EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 48, vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                             onPressed: () async {
-                              String fullPhoneNumber = '$_selectedCountryCode${_phoneController.text}';
+                              String fullPhoneNumber =
+                                  '$_selectedCountryCode${_phoneController.text}';
                               String otp = generateOTP();
-                              print('Generated OTP: $otp'); // Print OTP to console
+                              print(
+                                  'Generated OTP: $otp'); // Print OTP to console
 
                               // Notify.lk API credentials (Replace these with your actual credentials)
                               const String userId = '28446';
@@ -138,35 +147,41 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                               const String senderId = 'NotifyDEMO';
 
                               // Notify.lk API endpoint
-                              const String url = 'https://app.notify.lk/api/v1/send';
+                              const String url =
+                                  'https://app.notify.lk/api/v1/send';
 
                               // Prepare the message content
-                              String message = 'Your verification code is $otp. Please use this to verify your account.';
+                              String message =
+                                  'Your verification code is $otp. Please use this to verify your account.';
 
                               // API call parameters
                               final Map<String, String> queryParams = {
                                 'user_id': userId,
                                 'api_key': apiKey,
                                 'sender_id': senderId,
-                                'to': fullPhoneNumber.replaceAll('+', ''), // Ensure the phone number is in 947XXXXXXXX format
+                                'to': fullPhoneNumber.replaceAll('+',
+                                    ''), // Ensure the phone number is in 947XXXXXXXX format
                                 'message': message,
                               };
 
                               try {
                                 // Send OTP via Notify.lk API
                                 final response = await http.post(
-                                  Uri.parse(url).replace(queryParameters: queryParams),
+                                  Uri.parse(url)
+                                      .replace(queryParameters: queryParams),
                                 );
                                 print("response");
-                                print (response);
+                                print(response);
                                 // Handle API response
                                 if (response.statusCode == 200) {
                                   final responseData = response.body;
-                                  print('Response from Notify.lk: $responseData');
+                                  print(
+                                      'Response from Notify.lk: $responseData');
 
                                   // Check if OTP was sent successfully
-                                  if (responseData.contains('"status":"success"')) {
-
+                                  if (responseData
+                                      .contains('"status":"success"')) {
+                                    print('otp: $otp');
                                     Navigator.pushReplacement(
                                       context,
                                       MaterialPageRoute(
@@ -189,28 +204,35 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                   } else {
                                     // Display error if OTP failed to send
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Failed to send OTP. Please try again.')),
+                                      const SnackBar(
+                                          content: Text(
+                                              'Failed to send OTP. Please try again.')),
                                     );
                                   }
                                 } else {
                                   // Handle non-200 response
-                                  print('Failed to send OTP. Status code: ${response.statusCode}');
+                                  print(
+                                      'Failed to send OTP. Status code: ${response.statusCode}');
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed to send OTP. Please try again later.')),
+                                    const SnackBar(
+                                        content: Text(
+                                            'Failed to send OTP. Please try again later.')),
                                   );
                                 }
                               } catch (e) {
                                 // Handle exceptions
                                 print('Error occurred while sending OTP: $e');
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('An error occurred. Please try again later.')),
+                                  const SnackBar(
+                                      content: Text(
+                                          'An error occurred. Please try again later.')),
                                 );
                               }
                             },
-
-                            child: Text(
+                            child: const Text(
                               'Next',
-                              style: TextStyle(fontSize: 18, color: Colors.white),
+                              style:
+                                  TextStyle(fontSize: 18, color: Colors.white),
                             ),
                           ),
                         ),

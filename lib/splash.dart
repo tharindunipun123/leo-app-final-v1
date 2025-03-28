@@ -4,14 +4,19 @@ import 'HomeScreen.dart';
 import 'StartScreen.dart';
 import 'package:zego_zimkit/zego_zimkit.dart';
 
+import 'services/socket_service.dart';
+
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  final SocketService _socketService = SocketService();
+  String currentuserId = "";
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
@@ -24,7 +29,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Initialize fade controller
     _fadeController = AnimationController(
       vsync: this,
-      duration:  const Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
     );
 
     // Initialize scale controller
@@ -56,10 +61,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _startAnimationSequence();
     start();
     // Check shared preferences after animations
-
   }
+
   Future<void> start() async {
-    await  Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 3));
     checkUserData();
   }
 
@@ -86,6 +91,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     if (!mounted) return;
 
     if (userId != null && firstname != null) {
+      _socketService.connect(userId);
       ZIMKit().connectUser(id: userId, name: firstname);
       Navigator.pushReplacement(
         context,
@@ -93,7 +99,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
           builder: (context) => HomeScreen(
             userId: userId,
             username: firstname,
-
           ),
         ),
       );
@@ -118,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
         ),
         child: SafeArea(
@@ -160,16 +165,21 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         // App Name with custom font
                         Text(
                           'Leo Chat',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            color: Colors.black, // Change from Colors.white to Colors.black
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.5,
-                          ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                                color: Colors
+                                    .black, // Change from Colors.white to Colors.black
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
                         ),
                         const SizedBox(height: 20),
                         // Loading Indicator
                         const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ],
                     ),
@@ -188,7 +198,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       const Text(
                         'Powered by',
                         style: TextStyle(
-                          color: Colors.black54, // Change from Colors.white70 to Colors.black54
+                          color: Colors
+                              .black54, // Change from Colors.white70 to Colors.black54
                           fontSize: 14,
                         ),
                       ),

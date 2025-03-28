@@ -70,7 +70,7 @@ class _AccountScreen1State extends State<AccountScreen1> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-       // leading: const AppBarBackButton(),
+        // leading: const AppBarBackButton(),
         centerTitle: true,
         title: Text(
           'Edit Profile',
@@ -85,21 +85,22 @@ class _AccountScreen1State extends State<AccountScreen1> {
         enableScroll: true,
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(  // Remove SingleChildScrollView since BodyContainer handles it
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildProfileSection(context),
-            SizedBox(height: 15.w),
-            _buildWalletSection(context),
-            SizedBox(height: 15.w),
-            _buildMainFeaturesSection(context),
-            SizedBox(height: 15.w),
-            _buildSecondaryFeaturesSection(context),
-            SizedBox(height: 15.w),
-            _buildSettingsSection(context),
-            SizedBox(height: 20.w),
-          ],
-        ),
+            : Column(
+                // Remove SingleChildScrollView since BodyContainer handles it
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildProfileSection(context),
+                  SizedBox(height: 15.w),
+                  _buildWalletSection(context),
+                  SizedBox(height: 15.w),
+                  _buildMainFeaturesSection(context),
+                  SizedBox(height: 15.w),
+                  _buildSecondaryFeaturesSection(context),
+                  SizedBox(height: 15.w),
+                  _buildSettingsSection(context),
+                  SizedBox(height: 20.w),
+                ],
+              ),
       ),
     );
   }
@@ -107,7 +108,8 @@ class _AccountScreen1State extends State<AccountScreen1> {
   Widget _buildProfileSection(BuildContext context) {
     String? avatarUrl;
     if (userData != null && userData!['avatar'] != null) {
-      avatarUrl = '$baseUrl/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}';
+      avatarUrl =
+          '$baseUrl/api/files/${userData!['collectionId']}/${userData!['id']}/${userData!['avatar']}';
     }
 
     return Material(
@@ -121,10 +123,8 @@ class _AccountScreen1State extends State<AccountScreen1> {
         child: SizedBox(
           width: double.infinity,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-                vertical: 20.0,
-                horizontal: 20.0
-            ),
+            padding:
+                const EdgeInsets.symmetric(vertical: 20.0, horizontal: 20.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -132,17 +132,17 @@ class _AccountScreen1State extends State<AccountScreen1> {
                   borderRadius: BorderRadius.circular(30.w),
                   child: avatarUrl != null
                       ? Image.network(
-                    avatarUrl,
-                    width: 60.w,
-                    height: 60.w,
-                    fit: BoxFit.cover,
-                  )
+                          avatarUrl,
+                          width: 60.w,
+                          height: 60.w,
+                          fit: BoxFit.cover,
+                        )
                       : Image.asset(
-                    'assets/images/avatar.png',
-                    width: 60.w,
-                    height: 60.w,
-                    fit: BoxFit.cover,
-                  ),
+                          'assets/images/avatar.png',
+                          width: 60.w,
+                          height: 60.w,
+                          fit: BoxFit.cover,
+                        ),
                 ),
                 SizedBox(width: 15.w),
                 Column(
@@ -168,10 +168,9 @@ class _AccountScreen1State extends State<AccountScreen1> {
                 const Spacer(),
                 SvgPicture.asset(
                   'assets/icons/ic-arrow-right.svg',
-                  colorFilter: ColorFilter.mode(
+                  colorFilter: const ColorFilter.mode(
                       darkModeEnabled ? kDarkTextColor : kTextColor,
-                      BlendMode.srcIn
-                  ),
+                      BlendMode.srcIn),
                 ),
               ],
             ),
@@ -188,10 +187,7 @@ class _AccountScreen1State extends State<AccountScreen1> {
       elevation: 5,
       borderRadius: BorderRadius.circular(10.w),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-            vertical: 20.0,
-            horizontal: 10.0
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
         child: Column(
           children: [
             AccountTile(
@@ -241,7 +237,6 @@ class _AccountScreen1State extends State<AccountScreen1> {
       ),
     );
   }
-
 
   // Add these widget sections in the _AccountScreen1State class
 
@@ -376,17 +371,15 @@ class _AccountScreen1State extends State<AccountScreen1> {
   void _navigateToLevel(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => RankingPagelevel(ID: userId)
-    ));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => RankingPagelevel(ID: userId)));
   }
 
   void _navigateToNobel(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? 'd1k9aih2t9t9wo3';
     Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => profilepage(userId: userId, ID: userId)
-    ));
+        builder: (_) => profilepage(userId: userId, ID: userId)));
   }
 
   void _navigateToSVIP(BuildContext context) {
@@ -402,21 +395,19 @@ class _AccountScreen1State extends State<AccountScreen1> {
   }
 
   void _navigateToItems(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => StoreScreen()
-    ));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const StoreScreen()));
   }
 
   void _navigateToAchievements(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => AchievementPage()
-    ));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AchievementPage()));
   }
 
   void _navigateToInviteFriends(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => InviteFriendsPage()),
+      MaterialPageRoute(builder: (context) => const InviteFriendsPage()),
     );
   }
 
@@ -431,7 +422,7 @@ class _AccountScreen1State extends State<AccountScreen1> {
   void _navigateToSettings(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => SettingsPage()),
+      MaterialPageRoute(builder: (context) => const SettingsPage()),
     );
   }
 
