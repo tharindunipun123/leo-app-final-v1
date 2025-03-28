@@ -42,7 +42,7 @@ dependencies:
   flutter_staggered_grid_view: ^0.7.0
   http: ^0.13.6
   image_picker: ^0.8.7
-  zego_zimkit: ^1.18.13
+  zego_zimkit: ^1.18.14
   zego_uikit_prebuilt_call: ^4.16.12
   story_view: ^0.16.5
   zego_uikit: ^2.27.16
@@ -66,7 +66,23 @@ dependencies:
   country_flags: ^1.0.0
   web_socket_channel: ^2.4.0
   socket_io_client: ^3.0.2
-
+  contacts_service: ^0.6.3
+  permission_handler: ^11.4.0
+  path: ^1.9.0
+  http_parser: ^4.0.2
+  flutter_sound: ^9.27.0
+  flutter_pdfview: ^1.4.0
+  photo_view: ^0.15.0
+  video_player: ^2.9.3
+  chewie: ^1.10.0
+  audioplayers: ^6.4.0
+  path_provider: ^2.1.5
+  shared_preferences: ^2.5.2
+  video_thumbnail: ^0.5.3
+  onesignal_flutter: ^5.3.0
+  cached_network_image: ^3.3.1
+  just_audio: ^0.9.44
+  tencent_calls_uikit: ^2.6.0
 
 
 dev_dependencies:
@@ -164,6 +180,7 @@ flutter:
     - assets/images/facebook.jpg
     - assets/images/whatsapp.png
     - assets/smile.gif
+    - assets/chat_background.jpg
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:leo_app_01/StartScreen.dart';
 import 'package:leo_app_01/splash.dart';
+import 'package:provider/provider.dart';
+import 'package:tencent_calls_uikit/tencent_calls_uikit.dart';
 import 'package:zego_zimkit/zego_zimkit.dart';
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_prebuilt_live_audio_room/zego_uikit_prebuilt_live_audio_room.dart';
 import 'package:flutter/cupertino.dart';
+import 'Provider/broadcast_.dart';
 import 'chat/default_dialogs.dart';
+import 'services/socket_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -20,68 +24,75 @@ void main() {
   );
 
   ZegoUIKit().initLog().then((value) {
-    runApp(MyApp());
+    runApp(const MyApp());
   });
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilInit(
-      designSize: const Size(360, 690),
-      minTextAdapt: true,
-      splitScreenMode: true,
-      builder: (context, child) {
-        return MaterialApp(
-          navigatorKey: navigatorKey, // Add the navigator key
-          debugShowCheckedModeBanner: false,
-          title: 'ZEGOCLOUD Chat App',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            scaffoldBackgroundColor: Colors.white,
-          ),
-          home: ZegoUIKitPrebuiltLiveAudioRoomMiniPopScope(
-            child: SplashScreen(), // Your splash or main screen
-          ),
-          builder: (BuildContext context, Widget? child) {
-            return Stack(
-              children: [
-                child!,
-                ZegoUIKitPrebuiltLiveAudioRoomMiniOverlayPage(
-                  contextQuery: () {
-                    return navigatorKey.currentState!.context;
-                  },
-                  // Customize the minimized window appearance
-                  size: Size(120, 160),
-                  showDevices: true,
-                  showUserName: true,
-                  showLeaveButton: true,
-                  borderRadius: 12.0,
-                  borderColor: Colors.blue.withOpacity(0.2),
-                  backgroundColor: Colors.black.withOpacity(0.8),
-                  soundWaveColor: Colors.purple,
-                  supportClickZoom: true, // Allow click-to-restore functionality
-                ),
-                // Positioned(
-                //   bottom: 20,
-                //   right: 20,
-                //   child: ElevatedButton(
-                //     onPressed: () {
-                //       if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
-                //         ZegoUIKitPrebuiltLiveAudioRoomController().minimize.restore(context);
-                //       }
-                //     },
-                //     child: Text("Restore Audio Room"),
-                //   ),
-                //
-                // ),
-              ],
-            );
-          },
-        );
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => BroadcastProvider()),
+      ],
+      child: ScreenUtilInit(
+        designSize: const Size(360, 690),
+        minTextAdapt: true,
+        splitScreenMode: true,
+        builder: (context, child) {
+          return MaterialApp(
+            navigatorObservers: [TUICallKit.navigatorObserver],
+            navigatorKey: navigatorKey, // Add the navigator key
+            debugShowCheckedModeBanner: false,
+            title: 'ZEGOCLOUD Chat App',
+            theme: ThemeData(
+              primarySwatch: Colors.blue,
+              scaffoldBackgroundColor: Colors.white,
+            ),
+            home: const ZegoUIKitPrebuiltLiveAudioRoomMiniPopScope(
+              child: SplashScreen(), // Your splash or main screen
+            ),
+            builder: (BuildContext context, Widget? child) {
+              return Stack(
+                children: [
+                  child!,
+                  ZegoUIKitPrebuiltLiveAudioRoomMiniOverlayPage(
+                    contextQuery: () {
+                      return navigatorKey.currentState!.context;
+                    },
+                    // Customize the minimized window appearance
+                    size: const Size(120, 160),
+                    showDevices: true,
+                    showUserName: true,
+                    showLeaveButton: true,
+                    borderRadius: 12.0,
+                    borderColor: Colors.blue.withOpacity(0.2),
+                    backgroundColor: Colors.black.withOpacity(0.8),
+                    soundWaveColor: Colors.purple,
+                    supportClickZoom:
+                        true, // Allow click-to-restore functionality
+                  ),
+                  // Positioned(
+                  //   bottom: 20,
+                  //   right: 20,
+                  //   child: ElevatedButton(
+                  //     onPressed: () {
+                  //       if (ZegoUIKitPrebuiltLiveAudioRoomController().minimize.isMinimizing) {
+                  //         ZegoUIKitPrebuiltLiveAudioRoomController().minimize.restore(context);
+                  //       }
+                  //     },
+                  //     child: Text("Restore Audio Room"),
+                  //   ),
+                  //
+                  // ),
+                ],
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -135,7 +146,7 @@ class MyApp extends StatelessWidget {
 // }
 
 class ZIMKitDemoHomePage extends StatelessWidget {
-  const ZIMKitDemoHomePage({Key? key}) : super(key: key);
+  const ZIMKitDemoHomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -163,9 +174,8 @@ class ZIMKitDemoHomePage extends StatelessWidget {
   }
 }
 
-
 class HomePagePopupMenuButton extends StatefulWidget {
-  const HomePagePopupMenuButton({Key? key}) : super(key: key);
+  const HomePagePopupMenuButton({super.key});
 
   @override
   State<HomePagePopupMenuButton> createState() =>
