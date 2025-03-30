@@ -409,10 +409,10 @@ class _ChatListScreenState extends State<ChatListScreenUser>
       focusNode: _focusNode,
       child: Scaffold(
         body: _buildChatsTab(),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showNewChatDialog(),
-          child: const Icon(Icons.chat),
-        ),
+        // floatingActionButton: FloatingActionButton(
+        //   onPressed: () => _showNewChatDialog(),
+        //   child: const Icon(Icons.chat),
+        // ),
       ),
     );
   }

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_sound/flutter_sound.dart';
+import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -11,17 +11,17 @@ class AudioRecorderWidget extends StatefulWidget {
   final VoidCallback onRecordingCancelled;
 
   const AudioRecorderWidget({
-    Key? key,
+    super.key,
     required this.onRecordingComplete,
     required this.onRecordingCancelled,
-  }) : super(key: key);
+  });
 
   @override
   _AudioRecorderWidgetState createState() => _AudioRecorderWidgetState();
 }
 
 class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  late final RecorderController _recorderController;
   bool _isRecorderInitialized = false;
   bool _isRecording = false;
   String? _recordingPath;
@@ -31,14 +31,13 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
   @override
   void initState() {
     super.initState();
+    _recorderController = RecorderController();
     _initRecorder();
   }
 
-
-
   @override
   void dispose() {
-    _recorder.closeRecorder();
+    _recorderController.dispose();
     super.dispose();
   }
 
@@ -48,7 +47,6 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
       return;
     }
 
-    await _recorder.openRecorder();
     _isRecorderInitialized = true;
   }
 
@@ -57,22 +55,26 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
       await _initRecorder();
     }
 
-    Directory tempDir = await getTemporaryDirectory();
-    _recordingPath = '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.aac';
+    try {
+      // Get temporary directory path
+      Directory tempDir = await getTemporaryDirectory();
+      _recordingPath =
+          '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-    await _recorder.startRecorder(
-      toFile: _recordingPath,
-      codec: Codec.aacADTS,
-    );
+      // Initialize recorder and start recording
+      await _recorderController.record(path: _recordingPath);
 
-    setState(() {
-      _isRecording = true;
-      _recordingDuration = 0;
-      _startTime = DateTime.now();
-    });
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = 0;
+        _startTime = DateTime.now();
+      });
 
-    // Start timer to update recording duration
-    Future.delayed(const Duration(seconds: 1), _updateDuration);
+      // Start timer to update recording duration
+      Future.delayed(const Duration(seconds: 1), _updateDuration);
+    } catch (e) {
+      print('Error starting recording: $e');
+    }
   }
 
   void _updateDuration() {
@@ -84,33 +86,39 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
     }
   }
 
-
-
   Future<void> _stopRecording() async {
     if (!_isRecording) return;
 
-    await _recorder.stopRecorder();
+    try {
+      // Stop recording
+      await _recorderController.stop();
 
-    setState(() {
-      _isRecording = false;
-    });
+      setState(() {
+        _isRecording = false;
+      });
 
-    if (_recordingPath != null) {
-      widget.onRecordingComplete(_recordingPath!);
+      if (_recordingPath != null) {
+        widget.onRecordingComplete(_recordingPath!);
+      }
+    } catch (e) {
+      print('Error stopping recording: $e');
     }
   }
 
-
   void _cancelRecording() async {
     if (_isRecording) {
-      await _recorder.stopRecorder();
+      try {
+        await _recorderController.stop();
 
-      // Delete the recording file
-      if (_recordingPath != null) {
-        final file = File(_recordingPath!);
-        if (await file.exists()) {
-          await file.delete();
+        // Delete the recording file
+        if (_recordingPath != null) {
+          final file = File(_recordingPath!);
+          if (await file.exists()) {
+            await file.delete();
+          }
         }
+      } catch (e) {
+        print('Error cancelling recording: $e');
       }
     }
 
@@ -153,11 +161,28 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                'Recording... ${_formatDuration(_recordingDuration)}',
-                style: const TextStyle(
-                  color: Colors.red,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Recording... ${_formatDuration(_recordingDuration)}',
+                    style: const TextStyle(
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  AudioWaveforms(
+                    size: Size(MediaQuery.of(context).size.width * 0.4, 30),
+                    recorderController: _recorderController,
+                    waveStyle: const WaveStyle(
+                      waveColor: Colors.red,
+                      extendWaveform: true,
+                      showMiddleLine: false,
+                      spacing: 6,
+                    ),
+                  ),
+                ],
               ),
             ),
             IconButton(
@@ -187,7 +212,7 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
               onLongPress: _startRecording,
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.teal,
                   shape: BoxShape.circle,
                 ),

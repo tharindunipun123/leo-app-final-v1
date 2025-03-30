@@ -1,6 +1,9 @@
 // new_peer_chat_dialog.dart
 part of 'default_dialogs.dart';
 
+// Make sure to import flutter_contacts in your imports section
+// import 'package:flutter_contacts/flutter_contacts.dart';
+
 class _UserListItem {
   final String id;
   final String name;
@@ -18,10 +21,10 @@ class _UserListItem {
 void showDefaultNewPeerChatDialog(BuildContext context) {
   Timer.run(() async {
     try {
-      // Request contacts permission
-      final status = await Permission.contacts.request();
-      if (status != PermissionStatus.granted) {
-        print('permission status:$status');
+      // Request contacts permission using flutter_contacts
+      final hasPermission = await FlutterContacts.requestPermission();
+      if (!hasPermission) {
+        print('permission not granted');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -49,19 +52,20 @@ void showDefaultNewPeerChatDialog(BuildContext context) {
         final List<dynamic> userItems = data['items'] as List;
         print('Total users from DB: ${userItems.length}');
 
-        // Get contacts from device
-        List<Contact> contacts = await ContactsService.getContacts();
+        // Get contacts from device using flutter_contacts
+        List<Contact> contacts = await FlutterContacts.getContacts(
+            withProperties: true, withThumbnail: false);
         print('Total contacts found: ${contacts.length}');
 
         Set<String> contactPhoneNumbers = {};
 
         // Extract phone numbers from contacts and normalize them
         for (var contact in contacts) {
-          for (var phone in contact.phones ?? []) {
-            if (phone.value != null) {
+          for (var phone in contact.phones) {
+            if (phone.number.isNotEmpty) {
               // Normalize phone number (remove spaces, dashes, etc.)
               String normalizedNumber =
-                  phone.value!.replaceAll(RegExp(r'[^\d+]'), '');
+                  phone.number.replaceAll(RegExp(r'[^\d+]'), '');
               contactPhoneNumbers.add(normalizedNumber);
 
               // Debug log for phone numbers
@@ -273,8 +277,8 @@ void showDefaultNewPeerChatDialog(BuildContext context) {
       print('Error loading users or contacts: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to load users. Please try again.'),
+          SnackBar(
+            content: Text('Failed to load users: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
