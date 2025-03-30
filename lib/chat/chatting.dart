@@ -963,6 +963,7 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
                 CallButtons(
                   currentUserId: widget.currentUserId,
                   targetUserId: widget.receiverId,
+                  name: widget.receiverName,
                 ),
                 PopupMenuButton<String>(
                   icon: _isUserBlocked

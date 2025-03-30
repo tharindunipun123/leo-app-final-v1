@@ -43,7 +43,7 @@ dependencies:
   http: ^0.13.6
   image_picker: ^0.8.7
   zego_zimkit: ^1.18.14
-  zego_uikit_prebuilt_call: ^4.16.12
+  #zego_uikit_prebuilt_call: ^4.16.12
   story_view: ^0.16.5
   zego_uikit: ^2.27.16
   zego_uikit_prebuilt_live_audio_room: ^3.15.2
