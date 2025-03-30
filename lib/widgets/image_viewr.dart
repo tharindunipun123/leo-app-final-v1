@@ -3,7 +3,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
@@ -431,7 +431,7 @@ class AudioPlayerScreen extends StatefulWidget {
   });
 
   @override
-  _AudioPlayerScreenState createState() => _AudioPlayerScreenState();
+  State<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
 }
 
 class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
@@ -460,45 +460,38 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
         _errorMessage = null;
       });
 
-      // Set listeners
-      _audioPlayer.onDurationChanged.listen((newDuration) {
-        setState(() {
-          _duration = newDuration;
-        });
-      });
+      // Listen for changes in the player state
+      _audioPlayer.playerStateStream.listen((playerState) {
+        final isPlaying = playerState.playing;
+        final processingState = playerState.processingState;
 
-      _audioPlayer.onPositionChanged.listen((newPosition) {
         setState(() {
-          _position = newPosition;
-        });
-      });
-
-      _audioPlayer.onPlayerComplete.listen((event) {
-        setState(() {
-          _isPlaying = false;
-          _position = _duration;
-        });
-      });
-
-      _audioPlayer.onPlayerStateChanged.listen((state) {
-        if (state == PlayerState.playing) {
-          setState(() {
-            _isPlaying = true;
-          });
-        } else if (state == PlayerState.paused) {
-          setState(() {
+          _isPlaying = isPlaying;
+          if (processingState == ProcessingState.completed) {
             _isPlaying = false;
-          });
-        } else if (state == PlayerState.stopped) {
+            _position = _duration;
+          }
+        });
+      });
+
+      // Listen for changes in the playback position
+      _audioPlayer.positionStream.listen((position) {
+        setState(() {
+          _position = position;
+        });
+      });
+
+      // Listen for changes in the buffered position
+      _audioPlayer.durationStream.listen((duration) {
+        if (duration != null) {
           setState(() {
-            _isPlaying = false;
-            _position = Duration.zero;
+            _duration = duration;
           });
         }
       });
 
-      // Set source
-      await _audioPlayer.setSourceUrl(audioUrl);
+      // Set the audio source
+      await _audioPlayer.setUrl(audioUrl);
 
       setState(() {
         _isLoading = false;
@@ -660,7 +653,7 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
                             if (_isPlaying) {
                               _audioPlayer.pause();
                             } else {
-                              _audioPlayer.resume();
+                              _audioPlayer.play();
                             }
                           },
                         ),

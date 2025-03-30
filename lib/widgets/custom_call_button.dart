@@ -6,11 +6,13 @@ import 'package:tencent_calls_uikit/debug/generate_test_user_sig.dart';
 class CallButtons extends StatefulWidget {
   final String currentUserId;
   final String targetUserId;
+  final String name;
 
   const CallButtons({
     super.key,
     required this.currentUserId,
     required this.targetUserId,
+    required this.name,
   });
 
   @override

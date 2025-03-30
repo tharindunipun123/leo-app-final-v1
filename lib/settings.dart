@@ -86,7 +86,7 @@ class SettingsPage extends StatelessWidget {
             context,
             icon: Icons.block,
             title: 'Blocked Users',
-            onTap: () => _navigateToPage(context, 'Blocked Users'),
+            onTap: () => _navigateToBlockUsersPage(context, 'Blocked Users'),
           ),
 
           const Divider(color: dividerColor),
@@ -251,6 +251,15 @@ class SettingsPage extends StatelessWidget {
   }
 
   void _navigateToPage(BuildContext context, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BlockedUsersPage(title: title),
+      ),
+    );
+  }
+
+  void _navigateToBlockUsersPage(BuildContext context, String title) {
     Navigator.push(
       context,
       MaterialPageRoute(

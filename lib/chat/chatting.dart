@@ -57,13 +57,15 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
   bool _isCheckingBlockStatus = true;
   bool _isInSelectionMode = false;
   FilePreview? _filePreview;
+  bool _hasInitializedBlockStatus = false;
   @override
   void initState() {
     super.initState();
     _setupSocketListeners();
+    _setupBlockListeners();
     _loadChatHistory();
     _checkBlockStatus();
-
+    _forceBlockStatusCheck();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _forceScrollToBottom();
 
@@ -74,49 +76,92 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
     });
   }
 
-  void _checkBlockStatus() {
+  void _forceBlockStatusCheck() {
+    setState(() {
+      _isCheckingBlockStatus = true;
+      _hasInitializedBlockStatus = false;
+    });
+
+    // First, try to check if socket is connected
+    if (!_socketService.isConnected) {
+      print("Socket not connected during block check, connecting...");
+      _socketService.connect(widget.currentUserId);
+
+      // Give it time to connect before proceeding
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        _setupBlockListeners();
+        _requestBlockStatus();
+      });
+    } else {
+      _setupBlockListeners();
+      _requestBlockStatus();
+    }
+  }
+
+  void _setupBlockListeners() {
     final BuildContext currentContext = context;
+
+    // Clear any existing listeners to avoid duplicates
+    _socketService.onBlockedStatus = null;
+    _socketService.onUserBlocked = null;
+    _socketService.onUserUnblocked = null;
+    _socketService.onBlockedByUser = null;
+    _socketService.onMessageBlocked = null;
 
     // Set up block status listeners
     _socketService.onBlockedStatus = (isUserBlocked, isOtherUserBlocked) {
-      setState(() {
-        _isUserBlocked =
-            isOtherUserBlocked; // This shows if the current user has blocked the other user
-        _isCheckingBlockStatus = false;
-      });
+      print(
+          "🔒 Block status response received - isUserBlocked: $isUserBlocked, isOtherUserBlocked: $isOtherUserBlocked");
+
+      if (mounted) {
+        setState(() {
+          _isUserBlocked =
+              isOtherUserBlocked; // This shows if the current user has blocked the other user
+          _isCheckingBlockStatus = false;
+          _hasInitializedBlockStatus = true;
+        });
+      }
     };
 
     _socketService.onUserBlocked = (blockedUserId) {
-      if (blockedUserId == widget.receiverId) {
+      if (blockedUserId == widget.receiverId && mounted) {
+        print("🔒 User was blocked: $blockedUserId");
         setState(() {
           _isUserBlocked = true;
+          _hasInitializedBlockStatus = true;
         });
+
         // Show confirmation
         ScaffoldMessenger.of(currentContext).showSnackBar(
-          SnackBar(content: Text('User ${widget.receiverId} has been blocked')),
+          SnackBar(
+              content: Text('User ${widget.receiverName} has been blocked')),
         );
       }
     };
 
     _socketService.onUserUnblocked = (unblockedUserId) {
-      if (unblockedUserId == widget.receiverId) {
+      if (unblockedUserId == widget.receiverId && mounted) {
+        print("🔓 User was unblocked: $unblockedUserId");
         setState(() {
           _isUserBlocked = false;
+          _hasInitializedBlockStatus = true;
         });
+
         // Show confirmation
         ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
-              content: Text('User ${widget.receiverId} has been unblocked')),
+              content: Text('User ${widget.receiverName} has been unblocked')),
         );
       }
     };
 
     _socketService.onBlockedByUser = (blockedByUserId) {
-      if (blockedByUserId == widget.receiverId) {
+      if (blockedByUserId == widget.receiverId && mounted) {
         // Show a notification that you've been blocked
         ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(
-            content: Text('You have been blocked by user ${widget.receiverId}'),
+            content:
+                Text('You have been blocked by user ${widget.receiverName}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -124,7 +169,7 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
     };
 
     _socketService.onMessageBlocked = (receiverId, reason) {
-      if (receiverId == widget.receiverId) {
+      if (receiverId == widget.receiverId && mounted) {
         String message = 'Message not sent';
         if (reason == 'BLOCKED_BY_RECEIVER') {
           message =
@@ -139,8 +184,46 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
         );
       }
     };
+  }
 
-    // Check initial block status
+  void _checkBlockStatus() {
+    // Set initial state to checking
+    setState(() {
+      _isCheckingBlockStatus = true;
+      _hasInitializedBlockStatus = false;
+    });
+
+    // Check connection status first
+    if (!_socketService.isConnected) {
+      print("Socket not connected for block check, connecting first...");
+      _socketService.connect(widget.currentUserId);
+
+      // Wait for connection before checking block status
+      Future.delayed(const Duration(milliseconds: 800), () {
+        _requestBlockStatus();
+      });
+    } else {
+      // Socket already connected, request check immediately
+      _requestBlockStatus();
+    }
+
+    // Set a failsafe timeout in case server doesn't respond
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _isCheckingBlockStatus) {
+        print("⚠️ Block status check timed out");
+        setState(() {
+          _isCheckingBlockStatus = false;
+          _hasInitializedBlockStatus = true; // Mark as initialized anyway
+        });
+      }
+    });
+  }
+
+  void _requestBlockStatus() {
+    print(
+        "📤 Requesting block status check: ${widget.currentUserId} -> ${widget.receiverId}");
+
+    // Request block status check from server
     _socketService.checkBlockedStatus(
       widget.currentUserId,
       widget.receiverId,
@@ -911,9 +994,75 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Force a fresh check when the screen becomes visible again
+    if (!_hasInitializedBlockStatus || !_isCheckingBlockStatus) {
+      print("📱 Screen became visible, forcing block status check");
+      _forceBlockStatusCheck();
+    }
+  }
+
+  @override
   void dispose() {
     HomeScreen.setBottomBarVisibility(true);
+    _socketService.onBlockedStatus = null;
+    _socketService.onUserBlocked = null;
+    _socketService.onUserUnblocked = null;
+    _socketService.onBlockedByUser = null;
+    _socketService.onMessageBlocked = null;
     super.dispose();
+  }
+
+  Widget _buildBlockMenu() {
+    // Debug check
+    print(
+        "Building block menu - _isUserBlocked: $_isUserBlocked, _isCheckingBlockStatus: $_isCheckingBlockStatus");
+
+    return PopupMenuButton<String>(
+      icon: _isUserBlocked
+          ? const Icon(Icons.block, color: Colors.red)
+          : const Icon(Icons.more_vert),
+      onSelected: (value) {
+        if (value == 'block') {
+          if (_isUserBlocked) {
+            _unblockUser();
+          } else {
+            _showBlockConfirmationDialog();
+          }
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          value: 'block',
+          child: _isCheckingBlockStatus
+              ? const Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Text('Checking status...'),
+                  ],
+                )
+              : Row(
+                  children: [
+                    _isUserBlocked
+                        ? const Icon(Icons.person_add,
+                            size: 20, color: Colors.blue)
+                        : const Icon(Icons.block, size: 20, color: Colors.red),
+                    const SizedBox(width: 10),
+                    Text(_isUserBlocked ? 'Unblock user' : 'Block user'),
+                  ],
+                ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -941,6 +1090,7 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
                         fontWeight: FontWeight.normal,
                       ),
                     ),
+                  // Always show block status if blocked
                   if (_isUserBlocked)
                     const Text(
                       'Blocked',
@@ -948,6 +1098,16 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
                         fontSize: 12,
                         color: Colors.red,
                         fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  // Show loading indicator while checking
+                  if (_isCheckingBlockStatus)
+                    const Text(
+                      'Checking status...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
                       ),
                     ),
                 ],
@@ -963,36 +1123,10 @@ class _DemoChattingPageState extends State<DemoChattingMessageListPage> {
                 CallButtons(
                   currentUserId: widget.currentUserId,
                   targetUserId: widget.receiverId,
+                  name: widget.receiverName,
                 ),
-                PopupMenuButton<String>(
-                  icon: _isUserBlocked
-                      ? const Icon(Icons.block, color: Colors.red)
-                      : const Icon(Icons.more_vert),
-                  onSelected: (value) {
-                    if (value == 'block') {
-                      if (_isUserBlocked) {
-                        _unblockUser();
-                      } else {
-                        _showBlockConfirmationDialog();
-                      }
-                    }
-                  },
-                  // Remove the enabled property or set it to always true
-                  // enabled: !_isCheckingBlockStatus,
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'block',
-                      child:
-                          Text(_isUserBlocked ? 'Unblock user' : 'Block user'),
-                    ),
-                    // // You can add more menu items here if needed
-                    // const PopupMenuItem<String>(
-                    //   value: 'report',
-                    //   child: Text('Report user'),
-                    // ),
-                  ],
-                )
+                // Enhanced block status handling in the menu
+                _buildBlockMenu(),
               ],
       ),
       body: Column(
